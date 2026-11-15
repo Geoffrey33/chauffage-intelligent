@@ -40,7 +40,12 @@ class FakeKoolnova:
             if self.ignore:
                 self.ignore -= 1
                 return
-            self.set_state("heat", call.data["temperature"], context=call.context)
+            state = self.hass.states.get(KOOL).state
+            self.set_state(state, call.data["temperature"], context=call.context)
+
+        async def set_hvac_mode(call: ServiceCall) -> None:
+            self.calls.append(("set_hvac_mode", dict(call.data)))
+            self.set_state(call.data["hvac_mode"], self.temp, context=call.context)
 
         async def turn_off(call: ServiceCall) -> None:
             self.calls.append(("turn_off", dict(call.data)))
@@ -48,6 +53,7 @@ class FakeKoolnova:
 
         hass.services.async_register("climate", "set_temperature", set_temperature)
         hass.services.async_register("climate", "turn_off", turn_off)
+        hass.services.async_register("climate", "set_hvac_mode", set_hvac_mode)
 
     def set_state(self, state: str, temp: float, current: float = 19.5, context=None) -> None:
         self.temp = temp
@@ -182,7 +188,7 @@ async def test_modes_boost_absence(hass, setup, freezer):
     assert kool.temp == 18
     await hass.services.async_call("select", "select_option", {"entity_id": "select.salon_mode", "option": "comfort_plus"}, blocking=True)
     assert kool.temp == 22
-    await hass.services.async_call("climate", "set_hvac_mode", {"entity_id": "climate.salon", "hvac_mode": "auto"}, blocking=True)
+    await hass.services.async_call("select", "select_option", {"entity_id": "select.salon_mode", "option": "auto"}, blocking=True)
     assert kool.temp == 18
     hass.states.async_set("person.geoffrey", "not_home")
     await hass.async_block_till_done()
@@ -240,3 +246,15 @@ async def test_options_and_reconfigure(hass, setup):
     await hass.async_block_till_done()
     assert hass.states.get("climate.salon").attributes["windows"] == []
     assert hass.states.get("climate.salon").attributes["comfort"] == 21
+
+
+async def test_turns_koolnova_on_separately(hass, setup, freezer):
+    """Le Koolnova ignore hvac_mode dans set_temperature : il faut l'allumer à part."""
+    entry, kool = setup
+    kool.set_state("off", 18)
+    await hass.async_block_till_done()
+    mgr = entry.runtime_data
+    await mgr.async_resume(next(iter(mgr.zones)))  # annule le « manuel » détecté
+    await tick(hass, freezer)
+    assert hass.states.get(KOOL).state == "heat"
+    assert ("set_hvac_mode", {"entity_id": KOOL, "hvac_mode": "heat"}) in [(c, {k: str(v) for k, v in d.items()}) for c, d in kool.calls]

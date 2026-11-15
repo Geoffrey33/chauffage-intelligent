@@ -6,7 +6,7 @@ from homeassistant.const import Platform
 
 DOMAIN = "chauffage_intelligent"
 NAME = "Chauffage intelligent"
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
