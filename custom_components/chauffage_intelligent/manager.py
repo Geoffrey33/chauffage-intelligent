@@ -11,6 +11,7 @@ from typing import Any
 from homeassistant.components.climate import (
     ATTR_HVAC_MODE,
     DOMAIN as CLIMATE_DOMAIN,
+    SERVICE_SET_HVAC_MODE,
     SERVICE_SET_TEMPERATURE,
     SERVICE_TURN_OFF,
     HVACMode,
@@ -691,17 +692,24 @@ class Manager:
                     context=context,
                 )
             else:
-                await self.hass.services.async_call(
-                    CLIMATE_DOMAIN,
-                    SERVICE_SET_TEMPERATURE,
-                    {
-                        ATTR_ENTITY_ID: zone.climate_entity,
-                        ATTR_TEMPERATURE: desired,
-                        ATTR_HVAC_MODE: HVACMode.HEAT,
-                    },
-                    blocking=True,
-                    context=context,
-                )
+                if state.state != HVACMode.HEAT:
+                    # Le Koolnova ignore hvac_mode passé avec la consigne : on l'allume d'abord
+                    await self.hass.services.async_call(
+                        CLIMATE_DOMAIN,
+                        SERVICE_SET_HVAC_MODE,
+                        {ATTR_ENTITY_ID: zone.climate_entity, ATTR_HVAC_MODE: HVACMode.HEAT},
+                        blocking=True,
+                        context=context,
+                    )
+                current = self.hass.states.get(zone.climate_entity)
+                if current is None or _float(current.attributes.get(ATTR_TEMPERATURE)) != desired:
+                    await self.hass.services.async_call(
+                        CLIMATE_DOMAIN,
+                        SERVICE_SET_TEMPERATURE,
+                        {ATTR_ENTITY_ID: zone.climate_entity, ATTR_TEMPERATURE: desired},
+                        blocking=True,
+                        context=context,
+                    )
         except Exception as err:  # noqa: BLE001 - un Koolnova injoignable ne doit rien casser
             _LOGGER.warning("Envoi impossible vers %s : %s", zone.climate_entity, err)
 
