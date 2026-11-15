@@ -1,0 +1,33 @@
+name: Release
+
+# Crée automatiquement une release GitHub (donc une mise à jour visible dans HACS)
+# dès que la version change dans manifest.json.
+on:
+  push:
+    branches: [main]
+    paths: ["custom_components/chauffage_intelligent/manifest.json"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Lire la version
+        id: v
+        run: echo "version=$(jq -r .version custom_components/chauffage_intelligent/manifest.json)" >> "$GITHUB_OUTPUT"
+      - name: Créer la release si elle n'existe pas
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.v.outputs.version }}
+        run: |
+          TAG="v$VERSION"
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "$TAG existe déjà"; exit 0
+          fi
+          awk -v ver="$VERSION" '/^## /{p=($2==ver); next} p' CHANGELOG.md > notes.md
+          [ -s notes.md ] || echo "Version $VERSION" > notes.md
+          gh release create "$TAG" --target "$GITHUB_SHA" --title "$TAG" --notes-file notes.md

@@ -55,7 +55,12 @@ class FakeKoolnova:
         hass.services.async_register("climate", "turn_off", turn_off)
         hass.services.async_register("climate", "set_hvac_mode", set_hvac_mode)
 
-    def set_state(self, state: str, temp: float, current: float = 19.5, context=None) -> None:
+    current = 19.5
+
+    def set_state(self, state: str, temp: float, current: float | None = None, context=None) -> None:
+        if current is not None:
+            self.current = current
+        current = self.current
         self.temp = temp
         self.hass.states.async_set(
             KOOL, state,
@@ -258,3 +263,41 @@ async def test_turns_koolnova_on_separately(hass, setup, freezer):
     await tick(hass, freezer)
     assert hass.states.get(KOOL).state == "heat"
     assert ("set_hvac_mode", {"entity_id": KOOL, "hvac_mode": "heat"}) in [(c, {k: str(v) for k, v in d.items()}) for c, d in kool.calls]
+
+
+@pytest.mark.parametrize(("reached", "expected"), [(19.5, 2.1), (20.9, 2.6)])
+async def test_learning(hass, setup, freezer, reached, expected):
+    """Vitesse mesurée pendant la préchauffe de 17 h à 18 h (2,5 °C/h demandés, 10 °C dehors)."""
+    entry, kool = setup
+    freezer.move_to(datetime(2026, 11, 16, 16, 58, tzinfo=TZ))
+    kool.set_state("heat", kool.temp, current=18.0)
+    await tick(hass, freezer, 2)
+    zone = next(iter(entry.runtime_data.zones.values()))
+    assert zone.data["preheat_run"]["start_temp"] == 18.0
+    freezer.move_to(datetime(2026, 11, 16, 17, 59, tzinfo=TZ))
+    kool.set_state("heat", kool.temp, current=reached)
+    await tick(hass, freezer, 1)
+    assert zone.data["speed"] == expected
+    assert zone.data["last_learning"]["method"] == ("mesurée" if reached < 20.75 else "suivie")
+    assert zone.data["preheat_run"] is None
+
+
+async def test_learning_ignored_if_window(hass, setup, freezer):
+    entry, kool = setup
+    freezer.move_to(datetime(2026, 11, 16, 16, 58, tzinfo=TZ))
+    kool.set_state("heat", kool.temp, current=18.0)
+    await tick(hass, freezer, 2)
+    hass.states.async_set(WINDOW, "on")
+    await tick(hass, freezer, 1)
+    hass.states.async_set(WINDOW, "off")
+    freezer.move_to(datetime(2026, 11, 16, 17, 59, tzinfo=TZ))
+    kool.set_state("heat", kool.temp, current=19.0)
+    await tick(hass, freezer, 1)
+    zone = next(iter(entry.runtime_data.zones.values()))
+    assert zone.data["speed"] == 2.5
+
+
+def test_median_resists_one_bad_day():
+    from custom_components.chauffage_intelligent.manager import Manager  # noqa: F401
+    samples = sorted([2.0, 2.1, 0.5, 2.2, 1.9][-7:])
+    assert samples[len(samples) // 2] == 2.0

@@ -3,7 +3,7 @@
  */
 (() => {
   const DOMAIN = "chauffage_intelligent";
-  const CARD_VERSION = "1.1.0";
+  const CARD_VERSION = "1.2.0";
   const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   const DAY_SHORT = { mon: "Lun", tue: "Mar", wed: "Mer", thu: "Jeu", fri: "Ven", sat: "Sam", sun: "Dim" };
   const DAY_LONG = { mon: "lundi", tue: "mardi", wed: "mercredi", thu: "jeudi", fri: "vendredi", sat: "samedi", sun: "dimanche" };
@@ -34,6 +34,7 @@
   const toHHMM = (min) => `${String(Math.floor(min / 60)).padStart(2, "0")}:${String(min % 60).padStart(2, "0")}`;
   const fmtT = (v) => (v === null || v === undefined || isNaN(v) ? "—" : `${Number(v).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}°`);
   const clone = (o) => JSON.parse(JSON.stringify(o));
+  const num = (v) => (v === null || v === undefined || v === "" || isNaN(Number(v)) ? null : Number(v));
   const todayKey = () => DAYS[(new Date().getDay() + 6) % 7];
   const nowMin = () => { const d = new Date(); return d.getHours() * 60 + d.getMinutes(); };
   const slotTemp = (slot, a) => slot.preset === "custom" ? slot.temp : slot.preset === "eco" ? a.eco : slot.preset === "comfort_plus" ? a.comfort_plus : a.comfort;
@@ -445,8 +446,8 @@
       const a = this._a;
       if (!this._hass || !a.zone_id) return;
       if (!this._draft) this._draft = clone(a.planning || {});
-      const tabs = [["control", "Pilotage", "mdi:tune-variant"], ["planning", "Planning", "mdi:calendar-week"], ["settings", "Réglages", "mdi:cog-outline"]];
-      const content = this._tab === "planning" ? this._planningHtml(a) : this._tab === "settings" ? this._settingsHtml(a) : this._controlHtml(a);
+      const tabs = [["control", "Pilotage", "mdi:tune-variant"], ["planning", "Planning", "mdi:calendar-week"], ["history", "Historique", "mdi:chart-line"], ["settings", "Réglages", "mdi:cog-outline"]];
+      const content = this._tab === "planning" ? this._planningHtml(a) : this._tab === "settings" ? this._settingsHtml(a) : this._tab === "history" ? this._historyHtml(a) : this._controlHtml(a);
       this.shadowRoot.innerHTML = `
         <style>${BASE_CSS}${DIALOG_CSS}</style>
         <div class="backdrop"></div>
@@ -500,6 +501,136 @@
         </div>`;
     }
 
+    // ------------------------------------------------------------ Historique
+    async _loadHistory(days) {
+      const key = `${this.entityId}|${days}`;
+      const cached = this._hist && this._hist.key === key && Date.now() - this._hist.at < 300000;
+      if (cached || this._histLoading === key) return;
+      this._histLoading = key;
+      try {
+        const end = new Date();
+        const start = new Date(end.getTime() - days * 86400000);
+        const res = await this._hass.callWS({
+          type: "history/history_during_period",
+          start_time: start.toISOString(), end_time: end.toISOString(),
+          entity_ids: [this.entityId], minimal_response: false, no_attributes: false,
+          significant_changes_only: false, include_start_time_state: true,
+        });
+        let attrs = {};
+        const pts = (res[this.entityId] || []).map((r) => {
+          if (r.a) attrs = { ...attrs, ...r.a };
+          const t = ((r.lu ?? r.lc) || 0) * 1000;
+          return { t: Math.max(t, start.getTime()), cur: num(attrs.current_temperature), tgt: num(attrs.temperature),
+                   heat: attrs.hvac_action === "heating", win: !!attrs.window_effective };
+        }).filter((p) => p.t);
+        this._hist = { key, at: Date.now(), start: start.getTime(), end: end.getTime(), days, pts };
+      } catch (err) {
+        this._hist = { key, at: Date.now(), error: err.message || String(err) };
+      } finally {
+        this._histLoading = null;
+        if (this._tab === "history") this._render();
+      }
+    }
+
+    _historyHtml(a) {
+      const days = this._histDays || 1;
+      const h = this._hist;
+      if (!h || h.key !== `${this.entityId}|${days}`) { this._loadHistory(days); }
+      const seg = `<div class="seg small">${[[1, "24 h"], [7, "7 jours"]].map(([d, l]) => `<button data-hdays="${d}" class="${days === d ? "on" : ""}">${l}</button>`).join("")}</div>`;
+      if (!h || h.key !== `${this.entityId}|${days}`) return `<div class="section">${seg}<div class="hint">Chargement…</div></div>`;
+      if (h.error) return `<div class="section">${seg}<div class="error">Historique indisponible : ${esc(h.error)}</div></div>`;
+      const pts = h.pts;
+      if (pts.length < 2) return `<div class="section">${seg}<div class="hint">Pas encore assez d'historique.</div></div>`;
+
+      // segments [t0,t1) avec l'état du point
+      const segs = pts.map((p, i) => ({ ...p, t1: i + 1 < pts.length ? pts[i + 1].t : h.end }));
+      const dur = (pred) => segs.reduce((acc, p) => acc + (pred(p) ? p.t1 - p.t : 0), 0);
+      const heatMs = dur((p) => p.heat);
+      const midnight = new Date(); midnight.setHours(0, 0, 0, 0);
+      const todayMs = segs.reduce((acc, p) => acc + (p.heat ? Math.max(0, p.t1 - Math.max(p.t, midnight.getTime())) : 0), 0);
+      const onMs = dur((p) => p.tgt != null);
+      const okMs = dur((p) => p.tgt != null && p.cur != null && p.cur >= p.tgt - 0.3);
+      const curW = segs.filter((p) => p.cur != null);
+      const avg = curW.length ? curW.reduce((acc, p) => acc + p.cur * (p.t1 - p.t), 0) / curW.reduce((acc, p) => acc + (p.t1 - p.t), 0) : null;
+      const fmtDur = (ms) => { const m = Math.round(ms / 60000); return m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`; };
+
+      // graphique
+      const W = Math.max(300, Math.min(760, window.innerWidth) - 40), H = 210, L = 34, R = 8, T = 10, B = 26;
+      const vals = pts.flatMap((p) => [p.cur, p.tgt]).filter((v) => v != null);
+      let lo = Math.floor(Math.min(...vals) - 0.5), hi = Math.ceil(Math.max(...vals) + 0.5);
+      if (hi - lo < 3) { hi = lo + 3; }
+      const x = (t) => L + ((t - h.start) / (h.end - h.start)) * (W - L - R);
+      const y = (v) => T + (1 - (v - lo) / (hi - lo)) * (H - T - B);
+      const bands = (pred, cls) => {
+        const out = [];
+        for (const p of segs) {
+          if (!pred(p)) continue;
+          const last = out[out.length - 1];
+          if (last && p.t - last.t1 < 60000) last.t1 = p.t1; else out.push({ t: p.t, t1: p.t1 });
+        }
+        return out.map((b) => `<rect class="${cls}" x="${x(b.t)}" y="${T}" width="${Math.max(1, x(b.t1) - x(b.t))}" height="${H - T - B}"></rect>`).join("");
+      };
+      const step = (key) => {
+        let d = "", pen = false;
+        for (const p of segs) {
+          const v = p[key];
+          if (v == null) { pen = false; continue; }
+          d += `${pen ? "L" : "M"}${x(p.t).toFixed(1)},${y(v).toFixed(1)}L${x(p.t1).toFixed(1)},${y(v).toFixed(1)}`;
+          pen = true;
+        }
+        return d;
+      };
+      const line = (key) => {
+        let d = "", pen = false;
+        for (const p of segs) {
+          const v = p[key];
+          if (v == null) { pen = false; continue; }
+          d += `${pen ? "L" : "M"}${x(p.t).toFixed(1)},${y(v).toFixed(1)}`;
+          pen = true;
+        }
+        const last = segs[segs.length - 1];
+        if (last[key] != null) d += `L${x(last.t1).toFixed(1)},${y(last[key]).toFixed(1)}`;
+        return d;
+      };
+      const yTicks = [];
+      for (let v = lo; v <= hi; v += (hi - lo > 8 ? 2 : 1)) yTicks.push(`<line class="grid" x1="${L}" x2="${W - R}" y1="${y(v)}" y2="${y(v)}"></line><text class="lbl" x="${L - 6}" y="${y(v) + 4}" text-anchor="end">${v}°</text>`);
+      const xTicks = [];
+      if (days === 1) {
+        const d0 = new Date(h.start); d0.setMinutes(0, 0, 0);
+        for (let t = d0.getTime() + 3600000; t < h.end; t += 3600000) {
+          const hr = new Date(t).getHours();
+          if (hr % 6 === 0) xTicks.push(`<line class="grid v" x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${H - B}"></line><text class="lbl" x="${x(t)}" y="${H - 8}" text-anchor="middle">${hr} h</text>`);
+        }
+      } else {
+        const d0 = new Date(h.start); d0.setHours(24, 0, 0, 0);
+        for (let t = d0.getTime(); t < h.end; t += 86400000) {
+          const dd = new Date(t);
+          xTicks.push(`<line class="grid v" x1="${x(t)}" x2="${x(t)}" y1="${T}" y2="${H - B}"></line><text class="lbl" x="${x(t + 43200000)}" y="${H - 8}" text-anchor="middle">${DAY_SHORT[DAYS[(dd.getDay() + 6) % 7]]}</text>`);
+        }
+      }
+      const chart = `
+        <svg class="chart" viewBox="0 0 ${W} ${H}">
+          ${bands((p) => p.heat, "heat")}${bands((p) => p.win, "win")}
+          ${yTicks.join("")}${xTicks.join("")}
+          <path class="tgt" d="${step("tgt")}"></path>
+          <path class="cur" d="${line("cur")}"></path>
+        </svg>`;
+      return `
+        <div class="section">
+          <div class="row wrap" style="justify-content:space-between">${seg}
+            <div class="legend"><span class="lg"><span class="ln cur"></span>Mesurée</span><span class="lg"><span class="ln tgt"></span>Consigne</span><span class="lg"><span class="sq heat"></span>Demande de chauffe</span><span class="lg"><span class="sq win"></span>Fenêtre</span></div>
+          </div>
+          ${chart}
+        </div>
+        <div class="section stats">
+          <div class="stat"><span class="v">${fmtDur(todayMs)}</span><span class="k">de chauffe aujourd'hui</span></div>
+          <div class="stat"><span class="v">${fmtDur(heatMs)}</span><span class="k">de chauffe sur ${days === 1 ? "24 h" : "7 jours"}${days === 7 ? ` (${fmtDur(heatMs / 7)} / jour)` : ""}</span></div>
+          <div class="stat"><span class="v">${avg == null ? "—" : fmtT(avg)}</span><span class="k">température moyenne</span></div>
+          <div class="stat"><span class="v">${onMs ? Math.round((okMs / onMs) * 100) + " %" : "—"}</span><span class="k">du temps à la consigne</span></div>
+        </div>
+        <div class="hint">« Demande de chauffe » : la pièce est sous sa consigne. La PAC peut moduler sa puissance pendant ces périodes.</div>`;
+    }
+
     // ------------------------------------------------------------ Réglages
     _settingsHtml(a) {
       const stepper = (key, label, val, step = 0.5, unit = "°") => `
@@ -524,7 +655,7 @@
           <div class="label">Préchauffe</div>
           <label class="switch-row"><input type="checkbox" data-preheat ${a.preheat ? "checked" : ""}> Anticiper pour que la température soit atteinte à l'heure du planning</label>
           ${stepper("speed", "Vitesse de chauffe", a.speed, 0.1, " °C/h")}
-          <div class="hint">Apprise automatiquement après chaque préchauffe.${ll ? ` Dernier ajustement le ${new Date(ll.at).toLocaleDateString("fr-FR")} : ${fmtT(ll.measured)} mesurés pour ${fmtT(ll.target)} visés → ${ll.old_speed} → ${ll.new_speed} °C/h.` : ""}</div>
+          <div class="hint">Mesurée à chaque préchauffe (ramenée à 10 °C dehors), puis lissée sur les 7 dernières mesures${(a.speed_samples || []).length ? ` (${a.speed_samples.length} mesure${a.speed_samples.length > 1 ? "s" : ""})` : ""}.${ll ? ` Dernière mesure le ${new Date(ll.at).toLocaleDateString("fr-FR")} : ${fmtT(ll.start_temp ?? ll.measured)} → ${fmtT(ll.measured)}${ll.hours ? ` en ${String(ll.hours).replace(".", ",")} h` : ""} pour ${fmtT(ll.target)} visés${ll.outdoor != null ? `, ${fmtT(ll.outdoor)} dehors` : ""} : vitesse ${ll.old_speed} → ${ll.new_speed} °C/h.` : " Aucune mesure pour l'instant."}</div>
         </div>
         <div class="section">
           <div class="label">État</div>
@@ -802,6 +933,7 @@
         window.dispatchEvent(new CustomEvent("location-changed"));
       });
       if (this._tab === "planning") this._bindPlanning(root);
+      root.querySelectorAll("[data-hdays]").forEach((b) => b.addEventListener("click", () => { this._histDays = Number(b.dataset.hdays); this._render(); }));
     }
   }
 
@@ -819,6 +951,8 @@
     .tab { font: inherit; background: none; border: none; border-bottom: 2px solid transparent; color: var(--secondary-text-color); padding: 8px 12px; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
     .tab ha-icon { --mdc-icon-size: 18px; }
     .tab.on { color: var(--primary-color); border-color: var(--primary-color); }
+    .tabs { overflow-x: auto; scrollbar-width: none; }
+    @media (max-width: 520px) { .tab { padding: 8px 7px; font-size: 13px; gap: 4px; } .tab ha-icon { --mdc-icon-size: 16px; } }
     .body { padding-top: 6px; }
     .section { padding: 10px 0; border-bottom: 1px solid var(--divider-color); display: flex; flex-direction: column; gap: 8px; }
     .section:last-child { border-bottom: none; }
@@ -861,6 +995,23 @@
     .editor input, .tools select, .editor select { font: inherit; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); }
     .editor input[type=number] { width: 80px; }
     .seg.small button { padding: 4px 9px; }
+    .chart { width: 100%; height: auto; display: block; margin-top: 6px; }
+    .chart .grid { stroke: var(--divider-color); stroke-width: 1; }
+    .chart .grid.v { stroke-dasharray: 2 3; }
+    .chart .lbl { fill: var(--secondary-text-color); font-size: 11px; }
+    .chart .heat { fill: var(--ci-comfort); opacity: .14; }
+    .chart .win { fill: #42a5f5; opacity: .22; }
+    .chart .tgt { fill: none; stroke: var(--ci-comfort); stroke-width: 2; stroke-dasharray: 5 3; vector-effect: non-scaling-stroke; }
+    .chart .cur { fill: none; stroke: var(--primary-text-color); stroke-width: 2.2; vector-effect: non-scaling-stroke; stroke-linejoin: round; }
+    .ln { width: 16px; height: 0; border-top: 2px solid var(--primary-text-color); display: inline-block; }
+    .ln.tgt { border-top: 2px dashed var(--ci-comfort); }
+    .sq { width: 10px; height: 10px; border-radius: 2px; display: inline-block; }
+    .sq.heat { background: var(--ci-comfort); opacity: .35; }
+    .sq.win { background: #42a5f5; opacity: .5; }
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; }
+    .stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--secondary-background-color); }
+    .stat .v { font-size: 20px; font-weight: 500; }
+    .stat .k { font-size: 12px; color: var(--secondary-text-color); }
     .savebar { position: sticky; bottom: -12px; background: var(--card-background-color); display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--divider-color); margin-top: 6px; }
     .savebar .muted { margin-right: auto; font-size: 13px; }
   `;
