@@ -77,9 +77,13 @@ from .const import (
     GLOBAL_MODES,
     GLOBAL_OFF,
     GLOBAL_VACATION,
-    LEARN_MIN_IDLE_HOURS,
+    EXT_FACTOR,
+    EXT_REF_TEMP,
     R_ABSENCE_ARRIVAL,
+    R_ABSENCE_PREHEAT,
     R_PLANNING,
+    R_PREHEAT,
+    R_VACATION_PREHEAT,
     R_WINDOW,
     RETRY_AFTER_FAILURE_MIN,
     REVERT_WINDOW_MIN,
@@ -108,6 +112,7 @@ from .engine import (
 
 _LOGGER = logging.getLogger(__name__)
 
+PREHEAT_REASONS = {R_PREHEAT, R_ABSENCE_PREHEAT, R_VACATION_PREHEAT}
 OPEN_STATES = {STATE_ON, STATE_OPEN, "true", "opening"}
 HOME_STATES = {STATE_HOME, STATE_ON}
 
@@ -546,58 +551,116 @@ class Manager:
 
     # --- apprentissage ---
     def _learn(self, zone: ZoneRuntime, now: datetime, result: Result) -> None:
+        """Apprentissage de la vitesse de chauffe.
+
+        Pendant chaque préchauffe, on mémorise la température de départ et l'extérieur.
+        Au début de la plage visée, on compare avec la température atteinte :
+        - la pièce a suivi la rampe (écart ≤ 0,25 °C) : elle sait chauffer au moins à la vitesse
+          demandée, l'échantillon vaut vitesse × 1,1 (on sonde prudemment vers le haut) ;
+        - sinon : l'échantillon est la vitesse réellement mesurée (montée / durée), ramenée à
+          10 °C dehors.
+        La vitesse retenue est la médiane des 7 derniers échantillons : une mauvaise journée
+        (fenêtre ouverte, Koolnova qui n'a pas suivi…) ne la fait plus chuter.
+        """
         d = zone.data
         s = zone.settings
+        run = d.get("preheat_run")
         current = active_slot(s.planning, now)
         in_heat = current is not None and slot_temp(current[2], s) > s.eco
+        measured = self.current_temp(zone)
+        outdoor = self.outdoor_temp()
+        changed = False
+
+        # 1) Début d'une plage chaude : on termine la mesure
         if in_heat:
             start, _end, slot = current  # type: ignore[misc]
             key = start.isoformat()
             if d.get("last_slot_key") != key:
                 d["last_slot_key"] = key
-                idle_since = _dt(d.get("idle_since"))
-                eligible = (
-                    idle_since is not None
-                    and start - idle_since >= timedelta(hours=LEARN_MIN_IDLE_HOURS)
-                    and now - start < timedelta(minutes=10)
-                    and s.mode == ZONE_AUTO
-                    and s.preheat
-                    and self.glob["engine"]
-                    and self.glob["mode"] in (GLOBAL_AUTO, GLOBAL_ABSENCE)
-                    and result.reason in (R_PLANNING, R_ABSENCE_ARRIVAL)
-                )
-                measured = self.current_temp(zone)
-                if eligible and measured is not None:
-                    self._adjust_speed(zone, slot_temp(slot, s), measured, now)
-                d["idle_since"] = None
-                self.save()
-        elif d.get("idle_since") is None:
-            d["idle_since"] = now.isoformat()
+                changed = True
+                if run and abs((start - _dt(run["target_at"])).total_seconds()) <= 120:
+                    self._finish_run(zone, run, slot_temp(slot, s), measured, start, now)
+                d["preheat_run"] = run = None
+
+        # 2) Préchauffe en cours : on démarre ou on suit la mesure
+        if result.reason in PREHEAT_REASONS and result.preheat_at is not None:
+            if run is None or run.get("target_at") != result.preheat_at.isoformat():
+                if measured is not None:
+                    d["preheat_run"] = run = {
+                        "start": now.isoformat(),
+                        "start_temp": measured,
+                        "target_at": result.preheat_at.isoformat(),
+                        "out_sum": outdoor or 0.0,
+                        "out_n": 1 if outdoor is not None else 0,
+                        "valid": True,
+                        "asked_speed": s.speed,
+                    }
+                    changed = True
+            else:
+                if outdoor is not None:
+                    run["out_sum"] += outdoor
+                    run["out_n"] += 1
+                if zone.window_open_since is not None or zone.sync_status in ("failed", "unavailable"):
+                    run["valid"] = False
+                changed = True
+        elif run is not None and not in_heat:
+            # préchauffe interrompue (boost, manuel, fenêtre, changement de mode…)
+            if result.reason not in (R_PLANNING, R_ABSENCE_ARRIVAL):
+                d["preheat_run"] = None
+                changed = True
+        if changed:
             self.save()
 
-    def _adjust_speed(self, zone: ZoneRuntime, target: float, measured: float, now: datetime) -> None:
+    def _finish_run(
+        self, zone: ZoneRuntime, run: dict[str, Any], target: float,
+        measured: float | None, slot_start: datetime, now: datetime,
+    ) -> None:
         d = zone.data
+        if measured is None or not run.get("valid") or now - slot_start > timedelta(minutes=10):
+            return
+        started = _dt(run["start"])
+        hours = (slot_start - started).total_seconds() / 3600 if started else 0
+        need = target - run["start_temp"]
+        if hours < 0.75 or need < 1.0:
+            return  # trop court ou rien à chauffer : pas d'information fiable
+        out = run["out_sum"] / run["out_n"] if run.get("out_n") else None
         gap = target - measured
         old = float(d["speed"])
         if gap <= 0.25:
-            factor = 1.05
-        elif gap <= 0.75:
-            factor = 0.9
+            sample = old * 1.1
+            method = "suivie"
         else:
-            factor = 0.8
-        new = round(min(SPEED_MAX, max(SPEED_MIN, old * factor)), 2)
+            rate = max(0.0, measured - run["start_temp"]) / hours
+            sample = rate * (1 + EXT_FACTOR * max(0.0, EXT_REF_TEMP - out)) if out is not None else rate
+            method = "mesurée"
+        sample = round(min(SPEED_MAX, max(SPEED_MIN, sample)), 2)
+        samples = [*(d.get("speed_samples") or []), sample][-10:]
+        d["speed_samples"] = samples
+        recent = sorted(samples[-7:])
+        if len(recent) >= 3:
+            mid = len(recent) // 2
+            new = recent[mid] if len(recent) % 2 else (recent[mid - 1] + recent[mid]) / 2
+        else:
+            new = old * 0.6 + sample * 0.4
+        new = round(min(SPEED_MAX, max(SPEED_MIN, new)), 2)
         d["speed"] = new
         d["last_learning"] = {
             "at": now.isoformat(),
             "target": target,
             "measured": measured,
             "gap": round(gap, 2),
+            "start_temp": run["start_temp"],
+            "hours": round(hours, 2),
+            "outdoor": round(out, 1) if out is not None else None,
+            "method": method,
+            "sample": sample,
+            "samples": len(samples),
             "old_speed": old,
             "new_speed": new,
         }
         _LOGGER.info(
-            "%s : objectif %.1f, mesuré %.1f à l'heure prévue → vitesse %.2f → %.2f °C/h",
-            zone.name, target, measured, old, new,
+            "%s : %.1f → %.1f °C en %.1f h (objectif %.1f, %s) → échantillon %.2f, vitesse %.2f → %.2f °C/h",
+            zone.name, run["start_temp"], measured, hours, target, method, sample, old, new,
         )
 
     # --- application au Koolnova ---
@@ -916,6 +979,7 @@ class Manager:
             "engine": self.glob["engine"],
             "global_mode": self.glob["mode"],
             "last_learning": zone.data.get("last_learning"),
+            "speed_samples": zone.data.get("speed_samples") or [],
             "planning": s.planning,
             "outdoor_temp": self.outdoor_temp(),
             "vacation_end": self.glob.get("vacation_end"),

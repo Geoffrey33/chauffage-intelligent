@@ -85,7 +85,7 @@ class ZoneClimate(ZoneEntity, ClimateEntity):
         | ClimateEntityFeature.TURN_OFF
     )
     _unrecorded_attributes = frozenset(
-        {"planning", "last_learning", "windows", "manual", "koolnova_entity", "zone_id", "entry_id", "global_entities"}
+        {"planning", "last_learning", "windows", "manual", "koolnova_entity", "zone_id", "entry_id", "global_entities", "speed_samples"}
     )
 
     def __init__(self, manager, zone) -> None:

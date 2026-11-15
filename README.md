@@ -4,7 +4,7 @@ Intégration Home Assistant pour piloter un chauffage multizone (pensée pour un
 
 - **un thermostat par pièce** (`climate.<pièce>`) et une page appareil complète ;
 - **des plannings hebdomadaires visuels**, avec une consigne par plage (Eco, Confort, Confort +, ou température personnalisée) ;
-- **une préchauffe progressive** : les heures du planning sont celles où la température doit être *atteinte*. La consigne monte par paliers de 0,5 °C avant la plage, plus tôt quand il fait froid dehors. La vitesse de chauffe de chaque pièce **s'apprend toute seule** ;
+- **une préchauffe progressive** : les heures du planning sont celles où la température doit être *atteinte*. La consigne monte par paliers de 0,5 °C avant la plage, plus tôt quand il fait froid dehors. La vitesse de chauffe de chaque pièce **s'apprend toute seule** (mesurée à chaque préchauffe, lissée sur les 7 dernières mesures) ;
 - **des modes maison** : Auto, Absence (automatique quand plus personne n'est là, désactivable), Vacances (avec date de retour et préchauffe pour l'arrivée), Arrêt ;
 - **la coupure fenêtre** (délai réglable par pièce, notification) ;
 - **le boost** et les **réglages ponctuels** (valables jusqu'au prochain changement du planning) ;
@@ -16,6 +16,9 @@ La ventilation du Koolnova n'est jamais modifiée : seules la consigne et la mis
 ![Carte Chauffage intelligent](docs/carte-sombre.png)
 
 ## Installation (HACS)
+
+Chaque nouvelle version est publiée automatiquement comme release GitHub : HACS la propose aussitôt (voir [CHANGELOG.md](CHANGELOG.md)).
+
 
 1. HACS → menu ⋮ → **Dépôts personnalisés** → ajouter l'URL de ce dépôt, catégorie **Intégration**.
 2. Installer **Chauffage intelligent**, puis redémarrer Home Assistant.
@@ -43,6 +46,7 @@ title: Chauffage
 Toucher une pièce ouvre sa fenêtre de réglage :
 - **Pilotage** : mode, réglage ponctuel, boost.
 - **Planning** : éditeur de la semaine. Touche une zone vide pour ajouter une plage, fais glisser une plage ou ses bords, puis copie un jour vers d'autres jours ou reprends le planning d'une autre pièce.
+- **Historique** : courbe mesure / consigne sur 24 h ou 7 jours, temps de chauffe, température moyenne, part du temps à la consigne.
 - **Réglages** : consignes, préchauffe, vitesse apprise, état de la synchronisation.
 
 ## Ordre de priorité
