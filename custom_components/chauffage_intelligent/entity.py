@@ -60,7 +60,6 @@ class ZoneEntity(BaseEntity):
             manufacturer="Geoffrey Pronier",
             model="Pièce",
             sw_version=VERSION,
-            via_device=(DOMAIN, manager.entry.entry_id),
         )
 
     @property
