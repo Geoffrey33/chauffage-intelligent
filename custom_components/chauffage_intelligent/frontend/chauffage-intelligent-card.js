@@ -3,7 +3,7 @@
  */
 (() => {
   const DOMAIN = "chauffage_intelligent";
-  const CARD_VERSION = "1.0.2";
+  const CARD_VERSION = "1.1.0";
   const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   const DAY_SHORT = { mon: "Lun", tue: "Mar", wed: "Mer", thu: "Jeu", fri: "Ven", sat: "Sam", sun: "Dim" };
   const DAY_LONG = { mon: "lundi", tue: "mardi", wed: "mercredi", thu: "jeudi", fri: "vendredi", sat: "samedi", sun: "dimanche" };
@@ -160,27 +160,42 @@
         }
       }
 
+      const curs = ids.map((e) => Number(hass.states[e].attributes.current_temperature)).filter((v) => !isNaN(v));
+      const avg = curs.length ? curs.reduce((x, y) => x + y, 0) / curs.length : null;
+      const heatingCount = ids.filter((e) => hass.states[e].attributes.hvac_action === "heating").length;
+      const offCount = ids.filter((e) => hass.states[e].attributes.temperature == null).length;
+      const modeIdx = Math.max(0, GLOBAL_MODES.findIndex((m) => m.key === mode));
       const globalHtml = this._config.show_global && mode ? `
-        <div class="global">
-          <div class="seg" data-act="global">
-            ${GLOBAL_MODES.map((m) => `<button class="${mode === m.key ? "on" : ""}" data-mode="${m.key}"><ha-icon icon="${m.icon}"></ha-icon>${m.label}</button>`).join("")}
+        <div class="hero">
+          <div class="hero-main">
+            <div class="hero-temp">${avg == null ? "—" : avg.toLocaleString("fr-FR", { maximumFractionDigits: 1 })}<span>°</span></div>
+            <div class="hero-sub">
+              <div class="hero-title">${esc(this._config.title || "Maison")}</div>
+              <div class="muted">${heatingCount ? `${heatingCount} pièce${heatingCount > 1 ? "s" : ""} en chauffe` : "Aucune pièce en chauffe"}${offCount ? ` · ${offCount} coupée${offCount > 1 ? "s" : ""}` : ""}</div>
+            </div>
           </div>
-          <div class="chips">
-            <span class="chip click ${engineOn ? "on" : "warn"}" data-toggle="engine" title="Moteur : quand il est coupé, rien n'est envoyé au Koolnova"><ha-icon icon="mdi:engine${engineOn ? "" : "-off"}"></ha-icon>Moteur ${engineOn ? "actif" : "coupé"}</span>
-            <span class="chip click ${absAuto ? "on" : ""}" data-toggle="absence_auto" title="Passe en Absence quand plus personne n'est là"><ha-icon icon="mdi:home-account"></ha-icon>Absence auto ${absAuto ? "activée" : "désactivée"}</span>
-            ${presence ? `<span class="chip"><ha-icon icon="${presence === "on" ? "mdi:home" : "mdi:home-outline"}"></ha-icon>${presence === "on" ? "Quelqu'un est là" : "Personne"}</span>` : ""}
-            ${outdoor && !isNaN(outdoor) ? `<span class="chip"><ha-icon icon="mdi:thermometer"></ha-icon>Dehors ${fmtT(outdoor)}</span>` : ""}
+          <div class="hero-side">
+            ${outdoor && !isNaN(outdoor) ? `<span class="pill"><ha-icon icon="mdi:weather-cloudy"></ha-icon>${fmtT(outdoor)} dehors</span>` : ""}
+            ${presence ? `<span class="pill"><ha-icon icon="${presence === "on" ? "mdi:home" : "mdi:home-outline"}"></ha-icon>${presence === "on" ? "Présents" : "Absents"}</span>` : ""}
           </div>
-          ${mode === "vacation" && g.vacation_end ? `
-            <div class="vac"><ha-icon icon="mdi:airplane-landing"></ha-icon>Retour le
-              <input type="datetime-local" data-act="vac" value="${vacEnd && vacEnd !== "unknown" ? esc(this._localInput(vacEnd)) : ""}">
-              <span class="muted">la maison préchauffe pour votre retour puis repasse en Auto</span></div>` : ""}
-        </div>` : "";
+        </div>
+        <div class="modes" data-act="global" style="--n:${GLOBAL_MODES.length};--i:${modeIdx}">
+          <span class="slider"></span>
+          ${GLOBAL_MODES.map((m) => `<button class="${mode === m.key ? "on" : ""}" data-mode="${m.key}"><ha-icon icon="${m.icon}"></ha-icon><span>${m.label}</span></button>`).join("")}
+        </div>
+        <div class="toggles">
+          <button class="tg ${engineOn ? "on" : "warn"}" data-toggle="engine"><ha-icon icon="mdi:engine${engineOn ? "" : "-off"}"></ha-icon>Moteur ${engineOn ? "actif" : "coupé"}</button>
+          <button class="tg ${absAuto ? "on" : ""}" data-toggle="absence_auto"><ha-icon icon="mdi:home-account"></ha-icon>Absence auto</button>
+        </div>
+        ${mode === "vacation" && g.vacation_end ? `
+          <div class="vac"><ha-icon icon="mdi:airplane-landing"></ha-icon>Retour le
+            <input type="datetime-local" data-act="vac" value="${vacEnd && vacEnd !== "unknown" ? esc(this._localInput(vacEnd)) : ""}">
+            <span class="muted">préchauffe pour l'arrivée puis retour en Auto</span></div>` : ""}` : "";
 
       this.shadowRoot.innerHTML = `
         <style>${BASE_CSS}${CARD_CSS}</style>
         <ha-card>
-          ${this._config.title ? `<div class="title">${esc(this._config.title)}</div>` : ""}
+          ${!(this._config.show_global && mode) && this._config.title ? `<div class="title">${esc(this._config.title)}</div>` : ""}
           ${globalHtml}
           ${body}
           ${first && !first.engine ? `<div class="banner">Moteur coupé : les consignes sont calculées mais pas envoyées.</div>` : ""}
@@ -195,37 +210,67 @@
       return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
     }
 
+    _accent(a) {
+      if (a.temperature === null || a.temperature === undefined) return "var(--ci-off)";
+      if (a.reason === "boost") return "var(--ci-comfort-plus)";
+      if (["preheat", "absence_preheat", "vacation_preheat"].includes(a.reason)) return "var(--ci-preheat)";
+      return { eco: "var(--ci-eco)", comfort: "var(--ci-comfort)", comfort_plus: "var(--ci-comfort-plus)" }[a.preset_mode] || "var(--ci-custom)";
+    }
+
+    _ring(a, accent) {
+      const MIN = 14, MAX = 26, R = 40, C = 2 * Math.PI * R, ARC = 0.75 * C;
+      const f = (v) => Math.max(0, Math.min(1, (Number(v) - MIN) / (MAX - MIN)));
+      const off = a.temperature === null || a.temperature === undefined;
+      const cur = a.current_temperature;
+      const tgt = off ? null : a.temperature;
+      const ang = (v) => ((135 + 270 * f(v)) * Math.PI) / 180;
+      const dot = (v, cls) => v == null ? "" : `<circle class="${cls}" cx="${50 + R * Math.cos(ang(v))}" cy="${50 + R * Math.sin(ang(v))}" r="${cls === "cur" ? 5.5 : 3}"></circle>`;
+      const heating = a.hvac_action === "heating";
+      return `
+        <div class="ring ${heating ? "heating" : ""}">
+          <svg viewBox="0 0 100 100">
+            <circle class="track" cx="50" cy="50" r="${R}" stroke-dasharray="${ARC} ${C}" transform="rotate(135 50 50)"></circle>
+            ${tgt != null ? `<circle class="val" style="stroke:${accent}" cx="50" cy="50" r="${R}" stroke-dasharray="${ARC * f(tgt)} ${C}" transform="rotate(135 50 50)"></circle>` : ""}
+            ${dot(tgt, "tgt")}
+            ${dot(cur, "cur")}
+          </svg>
+          <div class="ring-c">
+            <div class="ring-cur">${cur == null ? "—" : Number(cur).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}<span>°</span></div>
+            <div class="ring-tgt" style="color:${accent}">${off ? `<ha-icon icon="mdi:power"></ha-icon>Arrêt` : `<ha-icon icon="${heating ? "mdi:fire" : "mdi:thermometer"}"></ha-icon>${fmtT(tgt)}`}</div>
+          </div>
+        </div>`;
+    }
+
+    _statusIcon(a) {
+      if (a.window_effective) return "mdi:window-open-variant";
+      return {
+        boost: "mdi:rocket-launch", manual: "mdi:hand-back-right", preheat: "mdi:clock-start", absence_preheat: "mdi:clock-start",
+        vacation_preheat: "mdi:clock-start", absence: "mdi:home-export-outline", absence_arrival: "mdi:home-account",
+        vacation: "mdi:airplane", global_off: "mdi:power", zone_off: "mdi:power", forced: "mdi:pin", eco: "mdi:leaf", planning: "mdi:calendar-clock",
+      }[a.reason] || "mdi:information-outline";
+    }
+
     _tile(eid) {
       const s = this._hass.states[eid];
       const a = s.attributes;
-      const name = a.friendly_name || eid;
-      const off = a.temperature === null || a.temperature === undefined;
-      const heating = a.hvac_action === "heating";
-      const preset = a.reason === "boost" ? "boost" : (a.preset_mode || (off ? "off" : "eco"));
-      const accent = { eco: "var(--ci-eco)", comfort: "var(--ci-comfort)", comfort_plus: "var(--ci-comfort-plus)", boost: "var(--ci-comfort-plus)", off: "var(--disabled-text-color, #9e9e9e)" }[preset] || "var(--ci-custom)";
-      const badges = [];
-      if (a.window_effective) badges.push(`<ha-icon title="Fenêtre ouverte" icon="mdi:window-open-variant"></ha-icon>`);
-      else if (a.window_open) badges.push(`<ha-icon title="Fenêtre ouverte (coupure dans quelques minutes)" icon="mdi:window-open"></ha-icon>`);
-      if (a.reason === "boost") badges.push(`<ha-icon title="Boost" icon="mdi:rocket-launch"></ha-icon>`);
-      if (a.reason === "manual") badges.push(`<ha-icon title="Réglage manuel" icon="mdi:hand-back-right"></ha-icon>`);
-      if (a.zone_mode && a.zone_mode !== "auto") badges.push(`<ha-icon title="Mode forcé" icon="mdi:pin"></ha-icon>`);
-      if (a.sync_status === "failed") badges.push(`<ha-icon class="err" title="Le Koolnova n'a pas pris la consigne" icon="mdi:alert"></ha-icon>`);
-      if (a.sync_status === "unavailable") badges.push(`<ha-icon class="err" title="Koolnova indisponible" icon="mdi:lan-disconnect"></ha-icon>`);
+      const accent = this._accent(a);
+      const alerts = [];
+      if (!a.window_effective && a.window_open) alerts.push(`<ha-icon title="Fenêtre ouverte : coupure dans quelques minutes" icon="mdi:window-open"></ha-icon>`);
+      if (a.sync_status === "failed") alerts.push(`<ha-icon class="err" title="Le Koolnova n'a pas pris la consigne" icon="mdi:alert"></ha-icon>`);
+      if (a.sync_status === "unavailable") alerts.push(`<ha-icon class="err" title="Koolnova indisponible" icon="mdi:lan-disconnect"></ha-icon>`);
+      const boost = a.reason === "boost";
       return `
-        <div class="tile ${heating ? "heating" : ""} ${off ? "off" : ""}" style="--accent:${accent}" data-zone="${esc(eid)}">
+        <div class="tile" style="--accent:${accent}" data-zone="${esc(eid)}">
           <div class="t-head">
-            <span class="t-name">${esc(name)}</span>
-            <span class="t-badges">${badges.join("")}</span>
+            <span class="t-name">${esc(a.friendly_name || eid)}</span>
+            <span class="t-alerts">${alerts.join("")}</span>
           </div>
-          <div class="t-temps">
-            <span class="t-cur">${fmtT(a.current_temperature)}</span>
-            <span class="t-target">${off ? `<ha-icon icon="mdi:power"></ha-icon>` : `<ha-icon icon="${heating ? "mdi:fire" : "mdi:arrow-right"}"></ha-icon>${fmtT(a.temperature)}`}</span>
-          </div>
-          <div class="t-reason">${esc(a.reason_text || "")}</div>
-          ${this._dayBar(a, todayKey(), true)}
-          <div class="t-actions">
-            <button class="icon" data-boost="${esc(eid)}" title="${a.reason === "boost" ? "Arrêter le boost" : "Boost"}"><ha-icon icon="${a.reason === "boost" ? "mdi:rocket-launch-outline" : "mdi:rocket-launch"}"></ha-icon></button>
-            ${a.reason === "manual" ? `<button class="icon" data-resume="${esc(eid)}" title="Reprendre le planning"><ha-icon icon="mdi:calendar-sync"></ha-icon></button>` : ""}
+          ${this._ring(a, accent)}
+          <div class="t-status" title="${esc(a.reason_text || "")}"><ha-icon icon="${this._statusIcon(a)}"></ha-icon><span>${esc(a.reason_text || "")}</span></div>
+          <div class="t-foot">
+            ${this._dayBar(a, todayKey(), true)}
+            <button class="icon ${boost ? "on" : ""}" data-boost="${esc(eid)}" title="${boost ? "Arrêter le boost" : "Boost"}"><ha-icon icon="mdi:rocket-launch"></ha-icon></button>
+            ${a.reason === "manual" || boost ? `<button class="icon" data-resume="${esc(eid)}" title="Reprendre le planning"><ha-icon icon="mdi:calendar-sync"></ha-icon></button>` : ""}
           </div>
         </div>`;
     }
@@ -277,37 +322,66 @@
   }
 
   const CARD_CSS = `
-    ha-card { padding: 16px; }
+    :host { --ci-preheat: #ffb300; --ci-off: var(--disabled-text-color, #8a8a8a); }
+    ha-card { padding: 18px; overflow: hidden; color: var(--primary-text-color); }
     .title { font-size: 20px; font-weight: 500; margin-bottom: 12px; }
-    .global { display: flex; flex-direction: column; gap: 10px; margin-bottom: 14px; }
-    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
-    .vac { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; }
+    .hero { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+    .hero-main { display: flex; align-items: center; gap: 14px; }
+    .hero-temp { font-size: 44px; font-weight: 300; line-height: 1; letter-spacing: -1px; }
+    .hero-temp span, .ring-cur span { font-size: .5em; vertical-align: top; margin-left: 1px; opacity: .7; }
+    .hero-title { font-size: 17px; font-weight: 500; }
+    .hero-sub .muted { font-size: 13px; margin-top: 2px; }
+    .hero-side { display: flex; gap: 6px; flex-wrap: wrap; }
+    .pill { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 6px 12px; border-radius: 999px; background: var(--secondary-background-color); }
+    .pill ha-icon { --mdc-icon-size: 18px; color: var(--secondary-text-color); }
+    .modes { position: relative; display: grid; grid-template-columns: repeat(var(--n), 1fr); margin: 16px 0 10px; padding: 4px; border-radius: 14px; background: var(--secondary-background-color); }
+    .modes .slider { position: absolute; top: 4px; bottom: 4px; left: 4px; width: calc((100% - 8px) / var(--n)); transform: translateX(calc(100% * var(--i))); border-radius: 10px; background: var(--primary-color); transition: transform .25s ease; box-shadow: 0 2px 6px rgba(0,0,0,.2); }
+    .modes button { position: relative; z-index: 1; font: inherit; font-size: 13px; border: none; background: none; color: var(--primary-text-color); padding: 8px 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 6px; border-radius: 10px; }
+    .modes button ha-icon { --mdc-icon-size: 18px; }
+    .modes button.on { color: var(--text-primary-color, #fff); font-weight: 500; }
+    @media (max-width: 420px) { .modes button span { display: none; } .modes button.on span { display: inline; } }
+    .toggles { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+    .tg { font: inherit; font-size: 12px; display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px; cursor: pointer; border: 1px solid var(--divider-color); background: none; color: var(--secondary-text-color); }
+    .tg ha-icon { --mdc-icon-size: 16px; }
+    .tg.on { color: var(--primary-color); border-color: color-mix(in srgb, var(--primary-color) 50%, transparent); background: color-mix(in srgb, var(--primary-color) 10%, transparent); }
+    .tg.warn { color: var(--warning-color, #ffa600); border-color: var(--warning-color, #ffa600); }
+    .vac { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 13px; margin-top: 8px; }
     .vac input { font: inherit; padding: 4px 6px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); }
-    .group { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: var(--secondary-text-color); margin: 14px 2px 8px; }
-    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
-    .tile { position: relative; border-radius: 14px; padding: 12px 12px 10px; cursor: pointer; background: var(--secondary-background-color, #f5f5f5);
-      border: 1px solid transparent; display: flex; flex-direction: column; gap: 6px; overflow: hidden; transition: transform .1s; }
-    .tile::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--accent); }
-    .tile:hover { border-color: var(--divider-color); }
-    .tile:active { transform: scale(.985); }
-    .tile.off { opacity: .75; }
-    .t-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; }
+    .group { font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--secondary-text-color); margin: 18px 2px 10px; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(158px, 1fr)); gap: 10px; }
+    .tile { position: relative; border-radius: 18px; padding: 12px 12px 10px; cursor: pointer; overflow: hidden;
+      background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 14%, var(--secondary-background-color)) 0%, var(--secondary-background-color) 55%);
+      border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent); display: flex; flex-direction: column; gap: 4px; transition: transform .12s, box-shadow .12s; }
+    .tile:hover { box-shadow: 0 4px 14px rgba(0,0,0,.12); }
+    .tile:active { transform: scale(.98); }
+    .t-head { display: flex; justify-content: space-between; align-items: center; gap: 6px; min-height: 22px; }
     .t-name { font-weight: 500; font-size: 15px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .t-badges { display: flex; gap: 2px; color: var(--secondary-text-color); }
-    .t-badges ha-icon { --mdc-icon-size: 18px; }
-    .t-badges ha-icon.err { color: var(--error-color, #db4437); }
-    .t-temps { display: flex; align-items: baseline; gap: 10px; }
-    .t-cur { font-size: 28px; font-weight: 400; line-height: 1; }
-    .t-target { display: inline-flex; align-items: center; gap: 2px; color: var(--accent); font-weight: 500; }
-    .t-target ha-icon { --mdc-icon-size: 16px; }
-    .heating .t-target ha-icon { animation: pulse 1.6s infinite; }
-    @keyframes pulse { 50% { opacity: .35; } }
-    .t-reason { font-size: 12px; color: var(--secondary-text-color); min-height: 16px; }
-    .t-actions { position: absolute; right: 6px; bottom: 18px; display: flex; gap: 2px; }
-    button.icon { border: none; background: none; color: var(--secondary-text-color); cursor: pointer; padding: 4px; border-radius: 50%; }
+    .t-alerts { display: flex; gap: 2px; color: var(--warning-color, #ffa600); }
+    .t-alerts ha-icon { --mdc-icon-size: 18px; }
+    .t-alerts ha-icon.err { color: var(--error-color, #db4437); }
+    .ring { position: relative; width: 118px; height: 118px; margin: 2px auto -10px; }
+    .ring svg { width: 100%; height: 100%; overflow: visible; }
+    .ring circle { fill: none; stroke-width: 7; stroke-linecap: round; }
+    .ring .track { stroke: var(--divider-color, rgba(127,127,127,.25)); }
+    .ring .val { transition: stroke-dasharray .4s; }
+    .ring .cur { fill: var(--card-background-color, #fff); stroke: var(--primary-text-color); stroke-width: 2.5; }
+    .ring .tgt { fill: var(--accent); stroke: none; }
+    .ring.heating .val { animation: glow 2s ease-in-out infinite; }
+    @keyframes glow { 50% { opacity: .55; } }
+    .ring-c { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+    .ring-cur { font-size: 30px; font-weight: 400; line-height: 1; letter-spacing: -.5px; }
+    .ring-tgt { display: inline-flex; align-items: center; gap: 2px; font-size: 13px; font-weight: 500; margin-top: 4px; }
+    .ring-tgt ha-icon { --mdc-icon-size: 15px; }
+    .ring.heating .ring-tgt ha-icon { animation: glow 1.6s infinite; }
+    .t-status { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary-text-color); min-height: 30px; }
+    .t-status ha-icon { --mdc-icon-size: 16px; color: var(--accent); flex: none; }
+    .t-status span { overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; line-height: 15px; }
+    .t-foot { display: flex; align-items: center; gap: 4px; margin-top: 2px; }
+    .t-foot .bar { flex: 1; height: 6px; background: var(--divider-color, #ddd); }
+    button.icon { border: none; background: none; color: var(--secondary-text-color); cursor: pointer; padding: 5px; border-radius: 50%; display: inline-flex; }
     button.icon:hover { background: var(--divider-color); }
-    button.icon ha-icon { --mdc-icon-size: 20px; }
-    .tile .bar { margin-top: 18px; height: 6px; background: var(--divider-color, #ddd); margin-right: 52px; }
+    button.icon.on { color: var(--ci-comfort-plus); }
+    button.icon ha-icon { --mdc-icon-size: 18px; }
     .empty { display: flex; gap: 12px; align-items: center; padding: 8px; }
     .banner { margin-top: 12px; padding: 8px 12px; border-radius: 10px; background: rgba(255, 166, 0, .15); font-size: 13px; }
   `;
