@@ -1,0 +1,40 @@
+{
+  "entity": {
+    "select": {
+      "global_mode": {"default": "mdi:home-thermometer", "state": {"absence": "mdi:home-export-outline", "vacation": "mdi:airplane", "off": "mdi:power"}},
+      "zone_mode": {"default": "mdi:thermostat-auto", "state": {"eco": "mdi:leaf", "comfort": "mdi:sofa", "comfort_plus": "mdi:fire", "off": "mdi:power"}}
+    },
+    "switch": {
+      "engine": {"default": "mdi:engine"},
+      "absence_auto": {"default": "mdi:home-account"},
+      "preheat": {"default": "mdi:clock-start"}
+    },
+    "number": {
+      "absence_temp": {"default": "mdi:home-export-outline"},
+      "vacation_temp": {"default": "mdi:airplane"},
+      "boost_temp": {"default": "mdi:rocket-launch"},
+      "boost_duration": {"default": "mdi:timer-outline"},
+      "eco": {"default": "mdi:leaf"},
+      "comfort": {"default": "mdi:sofa"},
+      "comfort_plus": {"default": "mdi:fire"},
+      "speed": {"default": "mdi:speedometer"}
+    },
+    "sensor": {
+      "status": {"default": "mdi:information-outline"},
+      "next_change": {"default": "mdi:calendar-clock"}
+    },
+    "button": {
+      "boost": {"default": "mdi:rocket-launch"},
+      "resume": {"default": "mdi:calendar-sync"}
+    },
+    "datetime": {"vacation_end": {"default": "mdi:airplane-landing"}}
+  },
+  "services": {
+    "set_planning": {"service": "mdi:calendar-edit"},
+    "boost": {"service": "mdi:rocket-launch"},
+    "cancel_boost": {"service": "mdi:rocket-launch-outline"},
+    "resume": {"service": "mdi:calendar-sync"},
+    "set_zone_settings": {"service": "mdi:tune"},
+    "set_zone_mode": {"service": "mdi:thermostat-auto"}
+  }
+}

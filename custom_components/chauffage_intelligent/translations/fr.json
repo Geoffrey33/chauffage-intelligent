@@ -1,0 +1,328 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Chauffage intelligent",
+        "description": "Réglages généraux. Les pièces s'ajoutent ensuite avec « Ajouter une pièce ».",
+        "data": {
+          "weather_entity": "Météo (température extérieure)",
+          "outdoor_sensor": "Sonde extérieure (prioritaire sur la météo)",
+          "presence_entities": "Personnes / présence",
+          "absence_delay": "Absence automatique après",
+          "notify_entities": "Notifications",
+          "notify_windows": "Prévenir quand une fenêtre coupe le chauffage"
+        },
+        "data_description": {
+          "weather_entity": "Sert à démarrer la préchauffe plus tôt quand il fait froid.",
+          "presence_entities": "Quand plus personne n'est là, la maison passe en Absence (désactivable sur le tableau de bord).",
+          "notify_entities": "Téléphones à prévenir (fenêtre ouverte, consigne non prise par le Koolnova)."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Réglages avancés",
+            "data": {
+              "arrival_minutes": "Absence : maintien du confort au début d'une plage",
+              "verify_delay": "Vérification de la consigne après",
+              "max_retries": "Nombre d'essais d'envoi"
+            },
+            "data_description": {
+              "arrival_minutes": "En absence, la pièce reste au confort pendant cette durée au début de chaque plage (arrivée prévue), puis redescend.",
+              "verify_delay": "Le Koolnova revient parfois à l'ancienne valeur : la consigne est vérifiée puis renvoyée si besoin."
+            }
+          }
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Déjà configuré : ajoute des pièces depuis l'intégration."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Chauffage intelligent",
+        "description": "Réglages généraux. Les pièces s'ajoutent ensuite avec « Ajouter une pièce ».",
+        "data": {
+          "weather_entity": "Météo (température extérieure)",
+          "outdoor_sensor": "Sonde extérieure (prioritaire sur la météo)",
+          "presence_entities": "Personnes / présence",
+          "absence_delay": "Absence automatique après",
+          "notify_entities": "Notifications",
+          "notify_windows": "Prévenir quand une fenêtre coupe le chauffage"
+        },
+        "data_description": {
+          "weather_entity": "Sert à démarrer la préchauffe plus tôt quand il fait froid.",
+          "presence_entities": "Quand plus personne n'est là, la maison passe en Absence (désactivable sur le tableau de bord).",
+          "notify_entities": "Téléphones à prévenir (fenêtre ouverte, consigne non prise par le Koolnova)."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Réglages avancés",
+            "data": {
+              "arrival_minutes": "Absence : maintien du confort au début d'une plage",
+              "verify_delay": "Vérification de la consigne après",
+              "max_retries": "Nombre d'essais d'envoi"
+            },
+            "data_description": {
+              "arrival_minutes": "En absence, la pièce reste au confort pendant cette durée au début de chaque plage (arrivée prévue), puis redescend.",
+              "verify_delay": "Le Koolnova revient parfois à l'ancienne valeur : la consigne est vérifiée puis renvoyée si besoin."
+            }
+          }
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "zone": {
+      "initiate_flow": {
+        "user": "Ajouter une pièce",
+        "reconfigure": "Modifier la pièce"
+      },
+      "entry_type": "Pièce",
+      "step": {
+        "user": {
+          "title": "Nouvelle pièce",
+          "description": "Le planning se règle ensuite sur la carte « Chauffage intelligent ».",
+          "data": {
+            "name": "Nom de la pièce",
+            "climate_entity": "Zone Koolnova à piloter",
+            "window_entities": "Capteurs de fenêtre",
+            "window_delay": "Couper après une ouverture de",
+            "usage": "Type de pièce",
+            "follow_external": "Respecter les réglages faits sur le thermostat Koolnova",
+            "eco": "Eco",
+            "comfort": "Confort",
+            "comfort_plus": "Confort +",
+            "speed": "Vitesse de chauffe initiale"
+          },
+          "data_description": {
+            "follow_external": "Une consigne changée directement sur le Koolnova devient un réglage manuel jusqu'au prochain changement de planning.",
+            "speed": "En °C par heure. Elle s'ajuste ensuite toute seule.",
+            "usage": "Sert seulement au regroupement sur la carte."
+          }
+        },
+        "reconfigure": {
+          "title": "Modifier la pièce",
+          "description": "Les consignes et le planning se règlent sur la carte ou sur la page de l'appareil.",
+          "data": {
+            "name": "Nom de la pièce",
+            "climate_entity": "Zone Koolnova à piloter",
+            "window_entities": "Capteurs de fenêtre",
+            "window_delay": "Couper après une ouverture de",
+            "usage": "Type de pièce",
+            "follow_external": "Respecter les réglages faits sur le thermostat Koolnova",
+            "eco": "Eco",
+            "comfort": "Confort",
+            "comfort_plus": "Confort +",
+            "speed": "Vitesse de chauffe initiale"
+          },
+          "data_description": {
+            "follow_external": "Une consigne changée directement sur le Koolnova devient un réglage manuel jusqu'au prochain changement de planning.",
+            "speed": "En °C par heure. Elle s'ajuste ensuite toute seule.",
+            "usage": "Sert seulement au regroupement sur la carte."
+          }
+        }
+      },
+      "error": {
+        "own_entity": "Choisis l'entité du Koolnova, pas celle de Chauffage intelligent.",
+        "already_used": "Cette zone est déjà utilisée par une autre pièce.",
+        "name_required": "Donne un nom à la pièce."
+      },
+      "abort": {
+        "reconfigure_successful": "Pièce mise à jour."
+      }
+    }
+  },
+  "selector": {
+    "usage": {
+      "options": {
+        "main": "Pièce principale",
+        "secondary": "Pièce peu utilisée"
+      }
+    }
+  },
+  "entity": {
+    "climate": {
+      "zone": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "eco": "Eco",
+              "comfort": "Confort",
+              "comfort_plus": "Confort +",
+              "boost": "Boost"
+            }
+          }
+        }
+      }
+    },
+    "select": {
+      "global_mode": {
+        "name": "Mode maison",
+        "state": {
+          "auto": "Auto",
+          "absence": "Absence",
+          "vacation": "Vacances",
+          "off": "Arrêt"
+        }
+      },
+      "zone_mode": {
+        "name": "Mode",
+        "state": {
+          "auto": "Auto (planning)",
+          "eco": "Eco forcé",
+          "comfort": "Confort forcé",
+          "comfort_plus": "Confort + forcé",
+          "off": "Arrêt"
+        }
+      }
+    },
+    "switch": {
+      "engine": {
+        "name": "Moteur actif"
+      },
+      "absence_auto": {
+        "name": "Absence automatique"
+      },
+      "preheat": {
+        "name": "Préchauffe"
+      }
+    },
+    "number": {
+      "absence_temp": {
+        "name": "Consigne absence"
+      },
+      "vacation_temp": {
+        "name": "Consigne vacances"
+      },
+      "boost_temp": {
+        "name": "Consigne boost"
+      },
+      "boost_duration": {
+        "name": "Durée du boost"
+      },
+      "eco": {
+        "name": "Eco"
+      },
+      "comfort": {
+        "name": "Confort"
+      },
+      "comfort_plus": {
+        "name": "Confort plus"
+      },
+      "speed": {
+        "name": "Vitesse de chauffe"
+      }
+    },
+    "sensor": {
+      "outdoor_temp": {
+        "name": "Température extérieure"
+      },
+      "status": {
+        "name": "Statut"
+      },
+      "target": {
+        "name": "Consigne"
+      },
+      "next_change": {
+        "name": "Prochain changement"
+      }
+    },
+    "binary_sensor": {
+      "presence": {
+        "name": "Présence"
+      },
+      "window": {
+        "name": "Coupure fenêtre"
+      }
+    },
+    "button": {
+      "boost": {
+        "name": "Boost"
+      },
+      "resume": {
+        "name": "Reprendre le planning"
+      }
+    },
+    "datetime": {
+      "vacation_end": {
+        "name": "Retour de vacances"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_planning": {
+      "message": "Planning invalide : {error}"
+    }
+  },
+  "services": {
+    "set_planning": {
+      "name": "Définir le planning",
+      "description": "Remplace le planning hebdomadaire d'une pièce.",
+      "fields": {
+        "planning": {
+          "name": "Planning",
+          "description": "Objet par jour (mon…sun) : liste de plages (start, end, preset, temp)."
+        }
+      }
+    },
+    "boost": {
+      "name": "Boost",
+      "description": "Chauffe plus fort pendant un temps donné.",
+      "fields": {
+        "duration": {
+          "name": "Durée",
+          "description": "En minutes (par défaut : durée du boost)."
+        },
+        "temperature": {
+          "name": "Température",
+          "description": "Par défaut : consigne boost."
+        }
+      }
+    },
+    "cancel_boost": {
+      "name": "Annuler le boost",
+      "description": "Arrête le boost en cours."
+    },
+    "resume": {
+      "name": "Reprendre le planning",
+      "description": "Annule le réglage manuel et le boost."
+    },
+    "set_zone_settings": {
+      "name": "Régler la pièce",
+      "description": "Consignes, vitesse de chauffe, préchauffe.",
+      "fields": {
+        "eco": {
+          "name": "Eco",
+          "description": "Consigne Eco."
+        },
+        "comfort": {
+          "name": "Confort",
+          "description": "Consigne Confort."
+        },
+        "comfort_plus": {
+          "name": "Confort +",
+          "description": "Consigne Confort +."
+        },
+        "speed": {
+          "name": "Vitesse",
+          "description": "°C/h"
+        },
+        "preheat": {
+          "name": "Préchauffe",
+          "description": "Anticiper les plages."
+        }
+      }
+    },
+    "set_zone_mode": {
+      "name": "Mode de la pièce",
+      "description": "Auto, Eco, Confort, Confort + ou Arrêt.",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "auto / eco / comfort / comfort_plus / off"
+        }
+      }
+    }
+  }
+}
