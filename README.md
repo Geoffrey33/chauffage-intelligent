@@ -13,6 +13,8 @@ Intégration Home Assistant pour piloter un chauffage multizone (pensée pour un
 
 La ventilation du Koolnova n'est jamais modifiée : seules la consigne et la mise en marche/arrêt sont envoyées.
 
+![Carte Chauffage intelligent](docs/carte-sombre.png)
+
 ## Installation (HACS)
 
 1. HACS → menu ⋮ → **Dépôts personnalisés** → ajouter l'URL de ce dépôt, catégorie **Intégration**.
