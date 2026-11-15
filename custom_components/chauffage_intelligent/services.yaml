@@ -1,0 +1,71 @@
+set_planning:
+  target:
+    entity:
+      integration: chauffage_intelligent
+      domain: climate
+  fields:
+    planning:
+      required: true
+      selector:
+        object:
+boost:
+  target:
+    entity:
+      integration: chauffage_intelligent
+      domain: climate
+  fields:
+    duration:
+      selector:
+        number:
+          min: 1
+          max: 1440
+          unit_of_measurement: min
+    temperature:
+      selector:
+        number:
+          min: 7
+          max: 30
+          step: 0.5
+          unit_of_measurement: °C
+cancel_boost:
+  target:
+    entity:
+      integration: chauffage_intelligent
+      domain: climate
+resume:
+  target:
+    entity:
+      integration: chauffage_intelligent
+      domain: climate
+set_zone_settings:
+  target:
+    entity:
+      integration: chauffage_intelligent
+      domain: climate
+  fields:
+    eco:
+      selector:
+        number: {min: 7, max: 30, step: 0.5, unit_of_measurement: °C}
+    comfort:
+      selector:
+        number: {min: 7, max: 30, step: 0.5, unit_of_measurement: °C}
+    comfort_plus:
+      selector:
+        number: {min: 7, max: 30, step: 0.5, unit_of_measurement: °C}
+    speed:
+      selector:
+        number: {min: 0.5, max: 5, step: 0.1, unit_of_measurement: °C/h}
+    preheat:
+      selector:
+        boolean:
+set_zone_mode:
+  target:
+    entity:
+      integration: chauffage_intelligent
+      domain: climate
+  fields:
+    mode:
+      required: true
+      selector:
+        select:
+          options: [auto, eco, comfort, comfort_plus, off]

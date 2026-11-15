@@ -1,0 +1,13 @@
+{
+  "domain": "chauffage_intelligent",
+  "name": "Chauffage intelligent",
+  "after_dependencies": ["frontend", "http", "notify", "weather"],
+  "codeowners": ["@Geoffrey33"],
+  "config_flow": true,
+  "documentation": "https://github.com/Geoffrey33/chauffage-intelligent",
+  "integration_type": "hub",
+  "iot_class": "calculated",
+  "issue_tracker": "https://github.com/Geoffrey33/chauffage-intelligent/issues",
+  "requirements": [],
+  "version": "1.0.0"
+}

@@ -1,0 +1,328 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Smart heating",
+        "description": "General settings. Add rooms afterwards with “Add room”.",
+        "data": {
+          "weather_entity": "Weather (outdoor temperature)",
+          "outdoor_sensor": "Outdoor sensor (overrides weather)",
+          "presence_entities": "People / presence",
+          "absence_delay": "Automatic away after",
+          "notify_entities": "Notifications",
+          "notify_windows": "Notify when a window stops heating"
+        },
+        "data_description": {
+          "weather_entity": "Used to start preheating earlier when it is cold.",
+          "presence_entities": "When nobody is home, the house switches to Away (can be disabled).",
+          "notify_entities": "Devices to notify."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "data": {
+              "arrival_minutes": "Away: keep comfort at slot start",
+              "verify_delay": "Check setpoint after",
+              "max_retries": "Send attempts"
+            },
+            "data_description": {
+              "arrival_minutes": "While away, comfort is kept this long at the start of each slot.",
+              "verify_delay": "The setpoint is checked then resent if needed."
+            }
+          }
+        }
+      }
+    },
+    "abort": {
+      "already_configured": "Already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Smart heating",
+        "description": "General settings. Add rooms afterwards with “Add room”.",
+        "data": {
+          "weather_entity": "Weather (outdoor temperature)",
+          "outdoor_sensor": "Outdoor sensor (overrides weather)",
+          "presence_entities": "People / presence",
+          "absence_delay": "Automatic away after",
+          "notify_entities": "Notifications",
+          "notify_windows": "Notify when a window stops heating"
+        },
+        "data_description": {
+          "weather_entity": "Used to start preheating earlier when it is cold.",
+          "presence_entities": "When nobody is home, the house switches to Away (can be disabled).",
+          "notify_entities": "Devices to notify."
+        },
+        "sections": {
+          "advanced": {
+            "name": "Advanced",
+            "data": {
+              "arrival_minutes": "Away: keep comfort at slot start",
+              "verify_delay": "Check setpoint after",
+              "max_retries": "Send attempts"
+            },
+            "data_description": {
+              "arrival_minutes": "While away, comfort is kept this long at the start of each slot.",
+              "verify_delay": "The setpoint is checked then resent if needed."
+            }
+          }
+        }
+      }
+    }
+  },
+  "config_subentries": {
+    "zone": {
+      "initiate_flow": {
+        "user": "Add room",
+        "reconfigure": "Edit room"
+      },
+      "entry_type": "Room",
+      "step": {
+        "user": {
+          "title": "New room",
+          "description": "Edit the schedule on the card afterwards.",
+          "data": {
+            "name": "Room name",
+            "climate_entity": "Climate entity to drive",
+            "window_entities": "Window sensors",
+            "window_delay": "Stop after window open for",
+            "usage": "Room type",
+            "follow_external": "Respect changes made on the device",
+            "eco": "Eco",
+            "comfort": "Comfort",
+            "comfort_plus": "Comfort +",
+            "speed": "Initial heating speed"
+          },
+          "data_description": {
+            "follow_external": "A setpoint changed on the device becomes a manual override until the next schedule change.",
+            "speed": "°C per hour, learned afterwards.",
+            "usage": "Only used to group rooms on the card."
+          }
+        },
+        "reconfigure": {
+          "title": "Edit room",
+          "description": "Setpoints and schedule are on the card or device page.",
+          "data": {
+            "name": "Room name",
+            "climate_entity": "Climate entity to drive",
+            "window_entities": "Window sensors",
+            "window_delay": "Stop after window open for",
+            "usage": "Room type",
+            "follow_external": "Respect changes made on the device",
+            "eco": "Eco",
+            "comfort": "Comfort",
+            "comfort_plus": "Comfort +",
+            "speed": "Initial heating speed"
+          },
+          "data_description": {
+            "follow_external": "A setpoint changed on the device becomes a manual override until the next schedule change.",
+            "speed": "°C per hour, learned afterwards.",
+            "usage": "Only used to group rooms on the card."
+          }
+        }
+      },
+      "error": {
+        "own_entity": "Pick the real device.",
+        "already_used": "Already used by another room.",
+        "name_required": "Name required."
+      },
+      "abort": {
+        "reconfigure_successful": "Room updated."
+      }
+    }
+  },
+  "selector": {
+    "usage": {
+      "options": {
+        "main": "Main room",
+        "secondary": "Rarely used room"
+      }
+    }
+  },
+  "entity": {
+    "climate": {
+      "zone": {
+        "state_attributes": {
+          "preset_mode": {
+            "state": {
+              "eco": "Eco",
+              "comfort": "Comfort",
+              "comfort_plus": "Comfort +",
+              "boost": "Boost"
+            }
+          }
+        }
+      }
+    },
+    "select": {
+      "global_mode": {
+        "name": "House mode",
+        "state": {
+          "auto": "Auto",
+          "absence": "Away",
+          "vacation": "Vacation",
+          "off": "Off"
+        }
+      },
+      "zone_mode": {
+        "name": "Mode",
+        "state": {
+          "auto": "Auto (schedule)",
+          "eco": "Forced eco",
+          "comfort": "Forced comfort",
+          "comfort_plus": "Forced comfort +",
+          "off": "Off"
+        }
+      }
+    },
+    "switch": {
+      "engine": {
+        "name": "Engine active"
+      },
+      "absence_auto": {
+        "name": "Automatic away"
+      },
+      "preheat": {
+        "name": "Preheat"
+      }
+    },
+    "number": {
+      "absence_temp": {
+        "name": "Away setpoint"
+      },
+      "vacation_temp": {
+        "name": "Vacation setpoint"
+      },
+      "boost_temp": {
+        "name": "Boost setpoint"
+      },
+      "boost_duration": {
+        "name": "Boost duration"
+      },
+      "eco": {
+        "name": "Eco"
+      },
+      "comfort": {
+        "name": "Comfort"
+      },
+      "comfort_plus": {
+        "name": "Comfort plus"
+      },
+      "speed": {
+        "name": "Heating speed"
+      }
+    },
+    "sensor": {
+      "outdoor_temp": {
+        "name": "Outdoor temperature"
+      },
+      "status": {
+        "name": "Status"
+      },
+      "target": {
+        "name": "Setpoint"
+      },
+      "next_change": {
+        "name": "Next change"
+      }
+    },
+    "binary_sensor": {
+      "presence": {
+        "name": "Presence"
+      },
+      "window": {
+        "name": "Window stop"
+      }
+    },
+    "button": {
+      "boost": {
+        "name": "Boost"
+      },
+      "resume": {
+        "name": "Resume schedule"
+      }
+    },
+    "datetime": {
+      "vacation_end": {
+        "name": "Vacation end"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_planning": {
+      "message": "Invalid schedule: {error}"
+    }
+  },
+  "services": {
+    "set_planning": {
+      "name": "Set schedule",
+      "description": "Replace a room's weekly schedule.",
+      "fields": {
+        "planning": {
+          "name": "Planning",
+          "description": "Per-day object with slots."
+        }
+      }
+    },
+    "boost": {
+      "name": "Boost",
+      "description": "Temporary boost.",
+      "fields": {
+        "duration": {
+          "name": "Duration",
+          "description": "Minutes."
+        },
+        "temperature": {
+          "name": "Temperature",
+          "description": "Defaults to boost setpoint."
+        }
+      }
+    },
+    "cancel_boost": {
+      "name": "Cancel boost",
+      "description": "Stop boost."
+    },
+    "resume": {
+      "name": "Resume schedule",
+      "description": "Cancel manual override and boost."
+    },
+    "set_zone_settings": {
+      "name": "Set room values",
+      "description": "Setpoints, speed, preheat.",
+      "fields": {
+        "eco": {
+          "name": "Eco",
+          "description": "Eco setpoint."
+        },
+        "comfort": {
+          "name": "Comfort",
+          "description": "Comfort setpoint."
+        },
+        "comfort_plus": {
+          "name": "Comfort +",
+          "description": "Comfort + setpoint."
+        },
+        "speed": {
+          "name": "Speed",
+          "description": "°C/h"
+        },
+        "preheat": {
+          "name": "Preheat",
+          "description": "Anticipate slots."
+        }
+      }
+    },
+    "set_zone_mode": {
+      "name": "Room mode",
+      "description": "Room mode.",
+      "fields": {
+        "mode": {
+          "name": "Mode",
+          "description": "auto / eco / comfort / comfort_plus / off"
+        }
+      }
+    }
+  }
+}
