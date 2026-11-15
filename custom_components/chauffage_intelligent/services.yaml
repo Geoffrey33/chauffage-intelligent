@@ -68,4 +68,4 @@ set_zone_mode:
       required: true
       selector:
         select:
-          options: [auto, eco, comfort, comfort_plus, off]
+          options: ["auto", "eco", "comfort", "comfort_plus", "off"]

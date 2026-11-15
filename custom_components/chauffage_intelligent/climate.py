@@ -25,6 +25,7 @@ from .engine import PlanningError
 from .entity import ZoneEntity
 
 PRESETS = ["eco", "comfort", "comfort_plus", "boost"]
+_NATIVE = hasattr(ClimateEntity, "native_target_temperature")
 
 
 async def async_setup_entry(
@@ -74,7 +75,6 @@ class ZoneClimate(ZoneEntity, ClimateEntity):
     """Thermostat virtuel d'une pièce."""
 
     _attr_name = None
-    _attr_temperature_unit = UnitOfTemperature.CELSIUS
     _attr_hvac_modes = [HVACMode.AUTO, HVACMode.HEAT, HVACMode.OFF]
     _attr_preset_modes = PRESETS
     _attr_target_temperature_step = 0.5
@@ -109,15 +109,37 @@ class ZoneClimate(ZoneEntity, ClimateEntity):
         """Maximum du Koolnova."""
         return self._koolnova_attr("max_temp", 30.0)
 
-    @property
-    def current_temperature(self) -> float | None:
-        """Température mesurée par le Koolnova."""
+    def _current(self) -> float | None:
         return self.manager.current_temp(self.zone)
 
-    @property
-    def target_temperature(self) -> float | None:
-        """Consigne calculée."""
+    def _target(self) -> float | None:
         return self.zone.result.target if self.zone.result else None
+
+    # HA 2026.11+ : propriétés « native_* » ; versions antérieures : noms historiques
+    if _NATIVE:
+        _attr_native_temperature_unit = UnitOfTemperature.CELSIUS
+
+        @property
+        def native_current_temperature(self) -> float | None:
+            """Température mesurée par le Koolnova."""
+            return self._current()
+
+        @property
+        def native_target_temperature(self) -> float | None:
+            """Consigne calculée."""
+            return self._target()
+    else:
+        _attr_temperature_unit = UnitOfTemperature.CELSIUS
+
+        @property
+        def current_temperature(self) -> float | None:
+            """Température mesurée par le Koolnova."""
+            return self._current()
+
+        @property
+        def target_temperature(self) -> float | None:
+            """Consigne calculée."""
+            return self._target()
 
     @property
     def hvac_mode(self) -> HVACMode:
@@ -132,8 +154,8 @@ class ZoneClimate(ZoneEntity, ClimateEntity):
     @property
     def hvac_action(self) -> HVACAction:
         """Chauffe en cours ?"""
-        target = self.target_temperature
-        current = self.current_temperature
+        target = self._target()
+        current = self._current()
         if target is None:
             return HVACAction.OFF
         if current is not None and current < target:
@@ -185,7 +207,8 @@ class ZoneClimate(ZoneEntity, ClimateEntity):
                 return
             if self.zone.data["mode"] == ZONE_OFF:
                 await self.manager.async_set_zone_mode(self.zone.subentry_id, ZONE_AUTO)
-        if (temp := kwargs.get(ATTR_TEMPERATURE)) is not None:
+        temp = kwargs.get(ATTR_TEMPERATURE, kwargs.get("native_temperature"))
+        if temp is not None:
             await self.manager.async_set_manual(self.zone.subentry_id, float(temp))
 
     async def async_turn_on(self) -> None:
