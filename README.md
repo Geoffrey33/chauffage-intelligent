@@ -68,6 +68,3 @@ mon:
   - {start: "18:00", end: "23:00", preset: custom, temp: 20.5}
 tue: []
 ```
-
----
-Création : Geoffrey Pronier
