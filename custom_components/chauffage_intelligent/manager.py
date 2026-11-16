@@ -897,6 +897,10 @@ class Manager:
         for key in ("eco", "comfort", "comfort_plus", "speed"):
             if values.get(key) is not None:
                 d[key] = float(values[key])
+        if values.get("speed") is not None:
+            # Vitesse réglée à la main : nouveau point de départ, les anciennes
+            # mesures ne doivent pas la ramener à leur médiane.
+            d["speed_samples"] = []
         if values.get("preheat") is not None:
             d["preheat"] = bool(values["preheat"])
         self.save()

@@ -160,6 +160,22 @@ async def test_window(hass, setup, freezer):
     assert hass.states.get(KOOL).state == "heat" and kool.temp == 18
 
 
+async def test_manual_speed_resets_samples(hass, setup, freezer):
+    entry, kool = setup
+    mgr = entry.runtime_data
+    zid = next(iter(mgr.zones))
+    mgr.zones[zid].data["speed_samples"] = [0.9, 0.8, 1.0]
+    await hass.services.async_call(
+        "number", "set_value", {"entity_id": "number.salon_vitesse_de_chauffe", "value": 2.5}, blocking=True
+    )
+    assert mgr.zones[zid].data["speed"] == 2.5
+    assert mgr.zones[zid].data["speed_samples"] == []
+    # un autre réglage ne touche pas aux mesures
+    mgr.zones[zid].data["speed_samples"] = [2.4]
+    await mgr.async_set_zone_values(zid, comfort=21.5)
+    assert mgr.zones[zid].data["speed_samples"] == [2.4]
+
+
 async def test_retry_when_koolnova_ignores(hass, setup, freezer):
     entry, kool = setup
     kool.ignore = 2
