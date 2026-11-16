@@ -1,5 +1,8 @@
 # Historique des versions
 
+## 1.2.2
+- Une vitesse de chauffe réglée à la main repart de zéro : les anciennes mesures sont oubliées, pour que l'apprentissage ne la ramène pas aussitôt à leur médiane.
+
 ## 1.2.1
 - **Préchauffe plus efficace** : une fois la préchauffe commencée, si la pièce est en retard sur la rampe, la consigne envoyée au Koolnova reste au moins 1,5 °C au-dessus de la température mesurée (sans dépasser la température visée). Une pièce en avance sur la rampe n'est pas poussée. Avec des paliers de 0,5 °C collés à la mesure, le Koolnova soufflait à bas débit et la pièce ne montait presque pas (constaté le 16/11 : salon resté à 18 °C pendant toute la préchauffe).
 
