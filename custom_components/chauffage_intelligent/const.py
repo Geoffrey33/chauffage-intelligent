@@ -111,6 +111,10 @@ LEARN_MIN_IDLE_HOURS = 3.0
 LOOKAHEAD_DAYS = 8
 EXT_REF_TEMP = 10.0
 EXT_FACTOR = 0.04
+# Pendant une préchauffe, la consigne envoyée reste au moins à cet écart au-dessus
+# de la température mesurée : avec un écart trop faible, le Koolnova (ventilation
+# auto) souffle à bas débit et la pièce ne monte presque pas.
+PREHEAT_MIN_GAP = 1.5
 RETRY_AFTER_FAILURE_MIN = 30
 REVERT_WINDOW_MIN = 45
 

@@ -70,6 +70,32 @@ def test_preheat_ramp():
     assert no.target == 18
 
 
+def test_preheat_min_gap():
+    # 17:00 : rampe à 18,5 ; pièce à 18 -> au moins 18 + 1,5 = 19,5
+    r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=18))
+    assert (r.target, r.reason) == (19.5, "preheat")
+    # arrondi au 0,5 inférieur : 18,3 + 1,5 = 19,8 -> 19,5
+    r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=18.3))
+    assert r.target == 19.5
+    # jamais au-dessus de la température visée (rampe 20,5 ; 20 + 1,5 = 21,5 -> 21)
+    r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=20))
+    assert r.target == 21
+    # écart déjà suffisant : la rampe garde la main
+    r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=18.5))
+    assert r.target == 20.5
+    # pièce en avance sur la rampe : pas de poussée inutile
+    r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=19.5))
+    assert r.target == 18.5
+    r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=20.5))
+    assert r.target == 20.5
+    # préchauffe pas encore commencée : on reste en Eco
+    r = compute(at(0, 16, 30), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=17))
+    assert (r.target, r.reason) == (18, "eco")
+    # aussi en absence
+    r = compute(at(0, 17, 0), glob(mode="absence"), zone(), ZoneInputs(outdoor_temp=10, current_temp=17))
+    assert (r.target, r.reason) == (18.5, "absence_preheat")
+
+
 def test_priorities():
     now = at(0, 19)
     assert compute(now, glob(), zone(), ZoneInputs(window_open=True)).target is None
