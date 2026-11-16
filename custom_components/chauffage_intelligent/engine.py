@@ -22,6 +22,7 @@ from .const import (
     LOOKAHEAD_DAYS,
     MAX_TEMP,
     MIN_TEMP,
+    PREHEAT_MIN_GAP,
     PRESET_LABELS,
     R_ABSENCE,
     R_ABSENCE_ARRIVAL,
@@ -286,8 +287,14 @@ def ramp(
     base: float,
     outdoor: float | None,
     search_from: datetime | None = None,
+    current: float | None = None,
 ) -> tuple[float, datetime | None, float | None]:
     """Consigne de préchauffe progressive vers la prochaine plage chaude.
+
+    Une fois la préchauffe commencée, si la pièce est en retard sur la rampe,
+    la consigne reste au moins PREHEAT_MIN_GAP au-dessus de la température
+    mesurée (sans dépasser la température visée), pour que la PAC chauffe
+    réellement. Une pièce en avance sur la rampe garde la consigne de la rampe.
 
     Retourne (consigne, heure de la plage visée, température visée).
     """
@@ -299,6 +306,8 @@ def ramp(
     hours = max(0.0, (start - now).total_seconds() / 3600)
     value = floor_half(temp - effective_speed(zone.speed, outdoor) * hours)
     value = min(max(value, base), temp)
+    if value > base and current is not None and current < value:
+        value = min(max(value, floor_half(current + PREHEAT_MIN_GAP)), temp)
     return value, start, temp
 
 
@@ -330,7 +339,9 @@ def compute(
     if glob.mode == GLOBAL_VACATION:
         base = glob.vacation_temp
         if zone.mode == ZONE_AUTO and zone.preheat and glob.vacation_end:
-            value, at, target = ramp(zone, now, base, inputs.outdoor_temp, glob.vacation_end)
+            value, at, target = ramp(
+                zone, now, base, inputs.outdoor_temp, glob.vacation_end, inputs.current_temp
+            )
             if value > base:
                 return Result(value, R_VACATION_PREHEAT, preheat_target=target, preheat_at=at, base=base)
         return Result(base, R_VACATION, base=base)
@@ -346,7 +357,7 @@ def compute(
             if temp > base and now - start < timedelta(minutes=glob.arrival_minutes):
                 return Result(temp, R_ABSENCE_ARRIVAL, preset=slot["preset"], slot_end=end, base=base)
         if zone.preheat:
-            value, at, target = ramp(zone, now, base, inputs.outdoor_temp)
+            value, at, target = ramp(zone, now, base, inputs.outdoor_temp, current=inputs.current_temp)
             if value > base:
                 return Result(value, R_ABSENCE_PREHEAT, preheat_target=target, preheat_at=at, base=base)
         return Result(base, R_ABSENCE, base=base)
@@ -366,7 +377,7 @@ def compute(
         return Result(slot_temp(slot, zone), R_PLANNING, preset=slot["preset"], slot_end=end)
     base = zone.eco
     if zone.preheat:
-        value, at, target = ramp(zone, now, base, inputs.outdoor_temp)
+        value, at, target = ramp(zone, now, base, inputs.outdoor_temp, current=inputs.current_temp)
         if value > base:
             return Result(value, R_PREHEAT, preset=SLOT_ECO, preheat_target=target, preheat_at=at, base=base)
     return Result(base, R_ECO, preset=SLOT_ECO, base=base)
