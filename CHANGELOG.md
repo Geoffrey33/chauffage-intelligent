@@ -1,5 +1,8 @@
 # Historique des versions
 
+## 1.2.3
+- **Plus d'allers-retours de consigne pendant la préchauffe** : la consigne vise désormais 1,5 °C au-dessus du plus bas entre la mesure et la rampe. En 1.2.1/1.2.2, elle retombait sur la mesure dès que la pièce rattrapait la rampe, puis remontait quelques minutes plus tard (constaté le 17/11 dans le salon, la cuisine et la bibliothèque), ce qui faisait lever le pied à la PAC et multipliait les écritures Modbus. Pendant une préchauffe, la consigne ne fait plus que monter.
+
 ## 1.2.2
 - Une vitesse de chauffe réglée à la main repart de zéro : les anciennes mesures sont oubliées, pour que l'apprentissage ne la ramène pas aussitôt à leur médiane.
 

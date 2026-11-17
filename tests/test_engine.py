@@ -83,11 +83,29 @@ def test_preheat_min_gap():
     # écart déjà suffisant : la rampe garde la main
     r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=18.5))
     assert r.target == 20.5
-    # pièce en avance sur la rampe : pas de poussée inutile
+    # pièce qui rattrape ou dépasse la rampe : la consigne ne retombe pas
+    # (rampe 18,5 à 17:00 -> 18,5 + 1,5 = 20)
+    r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=18.5))
+    assert r.target == 20
     r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=19.5))
-    assert r.target == 18.5
+    assert r.target == 20
     r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=20.5))
-    assert r.target == 20.5
+    assert r.target == 21
+
+
+def test_preheat_no_drop_when_room_catches_up():
+    # Cas réel du 17/11 (salon) : la consigne ne doit jamais baisser pendant
+    # la montée, quelle que soit la mesure qui arrive entre deux paliers.
+    z = zone(speed=2.0)
+    prev = None
+    temps = [18.5, 18.5, 19.0, 19.0, 19.5, 19.5, 20.0, 20.0, 20.5]
+    for i, cur in enumerate(temps):
+        now = at(0, 17, 0) + timedelta(minutes=6 * i)
+        r = compute(now, glob(), z, ZoneInputs(outdoor_temp=15, current_temp=cur))
+        if prev is not None:
+            assert r.target >= prev, (now, cur, r.target, prev)
+        assert r.target <= 21
+        prev = r.target
     # préchauffe pas encore commencée : on reste en Eco
     r = compute(at(0, 16, 30), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=17))
     assert (r.target, r.reason) == (18, "eco")
