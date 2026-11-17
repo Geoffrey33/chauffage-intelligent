@@ -665,7 +665,7 @@ class Manager:
 
     # --- application au Koolnova ---
     def _desired(self, zone: ZoneRuntime, state) -> float | None:
-        target = zone.result.target if zone.result else None
+        target = zone.result.send if zone.result else None
         if target is None:
             return None
         step = _float(state.attributes.get("target_temp_step")) or 0.5
@@ -804,8 +804,8 @@ class Manager:
             ):
                 return
         if zone.result is not None:
-            target = zone.result.target
-            if (target is None and new_off) or (target is not None and not new_off and new_temp == target):
+            wanted = {zone.result.target, zone.result.send}
+            if (zone.result.target is None and new_off) or (not new_off and new_temp in wanted):
                 return
         _LOGGER.info(
             "%s modifié directement (%s) : pris comme réglage manuel",
@@ -972,6 +972,7 @@ class Manager:
             "preheat": s.preheat,
             "preheat_target": r.preheat_target if r else None,
             "preheat_at": _iso(r.preheat_at) if r else None,
+            "sent_temperature": r.send if r else None,
             "slot_end": _iso(r.slot_end) if r else None,
             "next_change": _iso(next_change(s.planning, now)),
             "boost_until": zone.data.get("boost_until"),

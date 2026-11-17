@@ -71,31 +71,58 @@ def test_preheat_ramp():
 
 
 def test_preheat_min_gap():
-    # 17:00 : rampe à 18,5 ; pièce à 18 -> au moins 18 + 1,5 = 19,5
+    # écart de relance 3 °C ; 17:00 : rampe 18,5 ; pièce à 18 -> 18 + 3 = 21
     r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=18))
-    assert (r.target, r.reason) == (19.5, "preheat")
-    # arrondi au 0,5 inférieur : 18,3 + 1,5 = 19,8 -> 19,5
+    assert (r.target, r.send, r.reason) == (21, 21, "preheat")
+    r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=17))
+    assert (r.target, r.send) == (20, 20)
+    # arrondi au 0,5 inférieur : 18,3 + 3 = 21,3 -> 21
     r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=18.3))
-    assert r.target == 19.5
-    # jamais au-dessus de la température visée (rampe 20,5 ; 20 + 1,5 = 21,5 -> 21)
-    r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=20))
-    assert r.target == 21
-    # écart déjà suffisant : la rampe garde la main
+    assert r.send == 21
+    # relance au-dessus de l'objectif (max +1) tant que la pièce est à plus de 1 °C dessous
     r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=18.5))
-    assert r.target == 20.5
-    # pièce qui rattrape ou dépasse la rampe : la consigne ne retombe pas
-    # (rampe 18,5 à 17:00 -> 18,5 + 1,5 = 20)
-    r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=18.5))
-    assert r.target == 20
+    assert (r.target, r.send) == (21, 21.5)
     r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=19.5))
-    assert r.target == 20
+    assert (r.target, r.send) == (21, 21.5)
+    # à 1 °C ou moins de l'objectif : plus de dépassement
+    r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=20))
+    assert (r.target, r.send) == (21, 21)
     r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=20.5))
-    assert r.target == 21
+    assert r.send == 21
+    # préchauffe pas encore commencée : on reste en Eco
+    r = compute(at(0, 16, 30), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=17))
+    assert (r.target, r.send, r.reason) == (18, 18, "eco")
+    # aussi en absence
+    r = compute(at(0, 17, 0), glob(mode="absence"), zone(), ZoneInputs(outdoor_temp=10, current_temp=17))
+    assert (r.target, r.reason) == (20, "absence_preheat")
+    assert "Préchauffe → 21 °C à 18:00" == describe(r, at(0, 17, 0))
+
+
+def test_preheat_lone_small_zone_17_11():
+    # Cas réel du 17/11 : la chambre seule demande, la PAC ne repart qu'à 3 °C d'écart.
+    plan = normalize_planning({"mon": [{"start": "21:00", "end": "23:00", "preset": "comfort"}]})
+    z = zone(eco=17.5, comfort=21, speed=2.5, planning=plan)
+    r = compute(at(0, 19, 55), glob(), z, ZoneInputs(outdoor_temp=17, current_temp=18))
+    assert (r.reason, r.send) == ("preheat", 21)  # 3 °C d'écart dès le départ
+    r = compute(at(0, 20, 30), glob(), z, ZoneInputs(outdoor_temp=17, current_temp=19))
+    assert (r.target, r.send) == (21, 22)  # relance : objectif + 1
+    r = compute(at(0, 20, 45), glob(), z, ZoneInputs(outdoor_temp=17, current_temp=20))
+    assert (r.target, r.send) == (21, 21)  # fin de relance
+
+
+def test_planning_catch_up():
+    now = at(0, 19)  # plage confort 18:00-23:00 en cours
+    for cur, sent in [(None, 21), (18, 21), (19, 22), (19.5, 22), (20, 21), (21.5, 21)]:
+        r = compute(now, glob(), zone(), ZoneInputs(current_temp=cur))
+        assert (r.reason, r.target, r.send) == ("planning", 21, sent), cur
+        assert describe(r, now) == "Confort 21 °C jusqu'à 23:00"
+    # pas de relance en mode forcé, boost ou manuel
+    f = compute(now, glob(), zone(mode="comfort"), ZoneInputs(current_temp=18))
+    assert f.send == 21
 
 
 def test_preheat_no_drop_when_room_catches_up():
-    # Cas réel du 17/11 (salon) : la consigne ne doit jamais baisser pendant
-    # la montée, quelle que soit la mesure qui arrive entre deux paliers.
+    # La température visée ne baisse jamais pendant la montée (salon, 17/11).
     z = zone(speed=2.0)
     prev = None
     temps = [18.5, 18.5, 19.0, 19.0, 19.5, 19.5, 20.0, 20.0, 20.5]
@@ -104,14 +131,8 @@ def test_preheat_no_drop_when_room_catches_up():
         r = compute(now, glob(), z, ZoneInputs(outdoor_temp=15, current_temp=cur))
         if prev is not None:
             assert r.target >= prev, (now, cur, r.target, prev)
-        assert r.target <= 21
+        assert r.target <= 21 and r.send <= 22
         prev = r.target
-    # préchauffe pas encore commencée : on reste en Eco
-    r = compute(at(0, 16, 30), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=17))
-    assert (r.target, r.reason) == (18, "eco")
-    # aussi en absence
-    r = compute(at(0, 17, 0), glob(mode="absence"), zone(), ZoneInputs(outdoor_temp=10, current_temp=17))
-    assert (r.target, r.reason) == (18.5, "absence_preheat")
 
 
 def test_priorities():
