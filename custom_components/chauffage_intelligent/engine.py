@@ -291,10 +291,12 @@ def ramp(
 ) -> tuple[float, datetime | None, float | None]:
     """Consigne de préchauffe progressive vers la prochaine plage chaude.
 
-    Une fois la préchauffe commencée, si la pièce est en retard sur la rampe,
-    la consigne reste au moins PREHEAT_MIN_GAP au-dessus de la température
-    mesurée (sans dépasser la température visée), pour que la PAC chauffe
-    réellement. Une pièce en avance sur la rampe garde la consigne de la rampe.
+    Une fois la préchauffe commencée, la consigne vise PREHEAT_MIN_GAP
+    au-dessus du plus bas entre la mesure et la rampe (sans dépasser la
+    température visée) : la PAC chauffe réellement, et la consigne ne
+    retombe pas quand la pièce rattrape la rampe (pas d'allers-retours).
+    Une pièce en avance sur la rampe arrive un peu plus tôt : l'apprentissage
+    retarde alors le départ des préchauffes suivantes.
 
     Retourne (consigne, heure de la plage visée, température visée).
     """
@@ -306,8 +308,8 @@ def ramp(
     hours = max(0.0, (start - now).total_seconds() / 3600)
     value = floor_half(temp - effective_speed(zone.speed, outdoor) * hours)
     value = min(max(value, base), temp)
-    if value > base and current is not None and current < value:
-        value = min(max(value, floor_half(current + PREHEAT_MIN_GAP)), temp)
+    if value > base and current is not None:
+        value = min(max(value, floor_half(min(current, value) + PREHEAT_MIN_GAP)), temp)
     return value, start, temp
 
 

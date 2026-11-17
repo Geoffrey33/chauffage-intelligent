@@ -139,7 +139,7 @@ async def test_preheat_then_comfort(hass, setup, freezer):
     freezer.move_to(datetime(2026, 11, 16, 17, 0, tzinfo=TZ))
     await tick(hass, freezer)
     assert hass.states.get("climate.salon").attributes["reason"] == "preheat"
-    assert kool.temp == 18.5
+    assert kool.temp == 20  # rampe 18,5 + écart 1,5 (pièce simulée à 19,5)
     freezer.move_to(datetime(2026, 11, 16, 18, 0, tzinfo=TZ))
     await tick(hass, freezer)
     assert kool.temp == 21
