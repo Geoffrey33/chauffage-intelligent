@@ -22,6 +22,8 @@ from .const import (
     LOOKAHEAD_DAYS,
     MAX_TEMP,
     MIN_TEMP,
+    OVERDRIVE_BAND,
+    OVERDRIVE_MAX,
     PREHEAT_MIN_GAP,
     PRESET_LABELS,
     R_ABSENCE,
@@ -215,11 +217,21 @@ class Result:
     preheat_at: datetime | None = None
     slot_end: datetime | None = None
     base: float | None = None
+    # Consigne envoyée au Koolnova si elle diffère de `target` (relance : jusqu'à
+    # OVERDRIVE_MAX au-dessus de la température visée pendant une montée).
+    command: float | None = None
 
     @property
     def is_off(self) -> bool:
         """Zone coupée."""
         return self.target is None
+
+    @property
+    def send(self) -> float | None:
+        """Consigne à envoyer au Koolnova."""
+        if self.target is None:
+            return None
+        return self.command if self.command is not None else self.target
 
 
 def slot_temp(slot: dict[str, Any], zone: ZoneSettings) -> float:
@@ -281,6 +293,24 @@ def floor_half(value: float) -> float:
     return math.floor(value * 2 + 1e-9) / 2
 
 
+def overdrive(goal: float, push: float, current: float | None) -> float | None:
+    """Consigne de relance au-dessus de `goal`, ou None si inutile.
+
+    Seulement tant que la pièce est à plus de OVERDRIVE_BAND sous l'objectif,
+    et jamais plus de OVERDRIVE_MAX au-dessus.
+    """
+    if current is None or current >= goal - OVERDRIVE_BAND or push <= goal:
+        return None
+    return min(goal + OVERDRIVE_MAX, push)
+
+
+def catch_up(goal: float, current: float | None) -> float | None:
+    """Relance pendant une plage : pièce nettement sous la température visée."""
+    if current is None:
+        return None
+    return overdrive(goal, floor_half(current + PREHEAT_MIN_GAP), current)
+
+
 def ramp(
     zone: ZoneSettings,
     now: datetime,
@@ -288,7 +318,7 @@ def ramp(
     outdoor: float | None,
     search_from: datetime | None = None,
     current: float | None = None,
-) -> tuple[float, datetime | None, float | None]:
+) -> tuple[float, datetime | None, float | None, float | None]:
     """Consigne de préchauffe progressive vers la prochaine plage chaude.
 
     Une fois la préchauffe commencée, la consigne vise PREHEAT_MIN_GAP
@@ -298,19 +328,26 @@ def ramp(
     Une pièce en avance sur la rampe arrive un peu plus tôt : l'apprentissage
     retarde alors le départ des préchauffes suivantes.
 
-    Retourne (consigne, heure de la plage visée, température visée).
+    Tant que la pièce est à plus de OVERDRIVE_BAND sous la température visée,
+    la consigne envoyée peut la dépasser de OVERDRIVE_MAX (relance de la PAC).
+
+    Retourne (consigne, heure de la plage visée, température visée,
+    consigne de relance à envoyer ou None).
     """
     after = max(now, search_from) if search_from else now
     nxt = next_heat_slot(zone, after, base)
     if nxt is None:
-        return base, None, None
+        return base, None, None, None
     start, temp = nxt
     hours = max(0.0, (start - now).total_seconds() / 3600)
     value = floor_half(temp - effective_speed(zone.speed, outdoor) * hours)
     value = min(max(value, base), temp)
+    command = None
     if value > base and current is not None:
-        value = min(max(value, floor_half(min(current, value) + PREHEAT_MIN_GAP)), temp)
-    return value, start, temp
+        push = max(value, floor_half(min(current, value) + PREHEAT_MIN_GAP))
+        command = overdrive(temp, push, current)
+        value = min(push, temp)
+    return value, start, temp, command
 
 
 # --------------------------------------------------------------------------
@@ -341,11 +378,13 @@ def compute(
     if glob.mode == GLOBAL_VACATION:
         base = glob.vacation_temp
         if zone.mode == ZONE_AUTO and zone.preheat and glob.vacation_end:
-            value, at, target = ramp(
+            value, at, target, cmd = ramp(
                 zone, now, base, inputs.outdoor_temp, glob.vacation_end, inputs.current_temp
             )
             if value > base:
-                return Result(value, R_VACATION_PREHEAT, preheat_target=target, preheat_at=at, base=base)
+                return Result(
+                    value, R_VACATION_PREHEAT, preheat_target=target, preheat_at=at, base=base, command=cmd
+                )
         return Result(base, R_VACATION, base=base)
 
     if glob.mode == GLOBAL_ABSENCE:
@@ -357,11 +396,16 @@ def compute(
             start, end, slot = current
             temp = slot_temp(slot, zone)
             if temp > base and now - start < timedelta(minutes=glob.arrival_minutes):
-                return Result(temp, R_ABSENCE_ARRIVAL, preset=slot["preset"], slot_end=end, base=base)
+                return Result(
+                    temp, R_ABSENCE_ARRIVAL, preset=slot["preset"], slot_end=end, base=base,
+                    command=catch_up(temp, inputs.current_temp),
+                )
         if zone.preheat:
-            value, at, target = ramp(zone, now, base, inputs.outdoor_temp, current=inputs.current_temp)
+            value, at, target, cmd = ramp(zone, now, base, inputs.outdoor_temp, current=inputs.current_temp)
             if value > base:
-                return Result(value, R_ABSENCE_PREHEAT, preheat_target=target, preheat_at=at, base=base)
+                return Result(
+                    value, R_ABSENCE_PREHEAT, preheat_target=target, preheat_at=at, base=base, command=cmd
+                )
         return Result(base, R_ABSENCE, base=base)
 
     if zone.mode in (ZONE_ECO, ZONE_COMFORT, ZONE_COMFORT_PLUS):
@@ -376,12 +420,17 @@ def compute(
     current = active_slot(zone.planning, now)
     if current is not None:
         _start, end, slot = current
-        return Result(slot_temp(slot, zone), R_PLANNING, preset=slot["preset"], slot_end=end)
+        temp = slot_temp(slot, zone)
+        return Result(
+            temp, R_PLANNING, preset=slot["preset"], slot_end=end, command=catch_up(temp, inputs.current_temp)
+        )
     base = zone.eco
     if zone.preheat:
-        value, at, target = ramp(zone, now, base, inputs.outdoor_temp, current=inputs.current_temp)
+        value, at, target, cmd = ramp(zone, now, base, inputs.outdoor_temp, current=inputs.current_temp)
         if value > base:
-            return Result(value, R_PREHEAT, preset=SLOT_ECO, preheat_target=target, preheat_at=at, base=base)
+            return Result(
+                value, R_PREHEAT, preset=SLOT_ECO, preheat_target=target, preheat_at=at, base=base, command=cmd
+            )
     return Result(base, R_ECO, preset=SLOT_ECO, base=base)
 
 
