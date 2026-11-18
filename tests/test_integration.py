@@ -302,6 +302,26 @@ async def test_learning(hass, setup, freezer, reached, expected):
     assert zone.data["preheat_run"] is None
 
 
+async def test_learning_uses_time_reached(hass, setup, freezer):
+    """Objectif atteint à 17:30 puis la pièce redescend : la vitesse vient de 17:30."""
+    entry, kool = setup
+    freezer.move_to(datetime(2026, 11, 16, 16, 58, tzinfo=TZ))
+    kool.set_state("heat", kool.temp, current=18.0)
+    await tick(hass, freezer, 2)
+    zone = next(iter(entry.runtime_data.zones.values()))
+    freezer.move_to(datetime(2026, 11, 16, 17, 30, tzinfo=TZ))
+    kool.set_state("heat", kool.temp, current=21.0)
+    await tick(hass, freezer, 1)
+    assert zone.data["preheat_run"]["reached_at"] is not None
+    freezer.move_to(datetime(2026, 11, 16, 17, 59, tzinfo=TZ))
+    kool.set_state("heat", kool.temp, current=20.5)
+    await tick(hass, freezer, 1)
+    last = zone.data["last_learning"]
+    assert last["method"] == "atteinte"
+    assert last["sample"] > 2.5
+    assert zone.data["speed"] > 2.5
+
+
 async def test_learning_ignored_if_window(hass, setup, freezer):
     entry, kool = setup
     freezer.move_to(datetime(2026, 11, 16, 16, 58, tzinfo=TZ))

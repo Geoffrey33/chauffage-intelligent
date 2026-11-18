@@ -78,6 +78,7 @@ from .const import (
     GLOBAL_OFF,
     GLOBAL_VACATION,
     EXT_FACTOR,
+    REACHED_TOL,
     EXT_REF_TEMP,
     R_ABSENCE_ARRIVAL,
     R_ABSENCE_PREHEAT,
@@ -555,6 +556,8 @@ class Manager:
 
         Pendant chaque préchauffe, on mémorise la température de départ et l'extérieur.
         Au début de la plage visée, on compare avec la température atteinte :
+        - la pièce a atteint l'objectif nettement avant l'heure : l'échantillon est la vitesse
+          réelle jusqu'à ce moment (la pièce peut redescendre ensuite, PAC arrêtée) ;
         - la pièce a suivi la rampe (écart ≤ 0,25 °C) : elle sait chauffer au moins à la vitesse
           demandée, l'échantillon vaut vitesse × 1,1 (on sonde prudemment vers le haut) ;
         - sinon : l'échantillon est la vitesse réellement mesurée (montée / durée), ramenée à
@@ -594,12 +597,22 @@ class Manager:
                         "out_n": 1 if outdoor is not None else 0,
                         "valid": True,
                         "asked_speed": s.speed,
+                        "goal": result.preheat_target,
+                        "reached_at": None,
                     }
                     changed = True
             else:
                 if outdoor is not None:
                     run["out_sum"] += outdoor
                     run["out_n"] += 1
+                goal = run.get("goal")
+                if (
+                    not run.get("reached_at") and goal is not None and measured is not None
+                    and measured >= goal - REACHED_TOL
+                ):
+                    # objectif atteint avant l'heure : c'est ce moment qui compte pour
+                    # la vitesse (la pièce peut redescendre ensuite, PAC à l'arrêt).
+                    run["reached_at"] = now.isoformat()
                 if zone.window_open_since is not None or zone.sync_status in ("failed", "unavailable"):
                     run["valid"] = False
                 changed = True
@@ -626,12 +639,19 @@ class Manager:
         out = run["out_sum"] / run["out_n"] if run.get("out_n") else None
         gap = target - measured
         old = float(d["speed"])
-        if gap <= 0.25:
+        reached = _dt(run["reached_at"]) if run.get("reached_at") else None
+        reach_hours = (reached - started).total_seconds() / 3600 if reached and started else None
+        ext = (1 + EXT_FACTOR * max(0.0, EXT_REF_TEMP - out)) if out is not None else 1.0
+        if reach_hours is not None and reach_hours < hours - 0.25:
+            # atteint nettement avant l'heure : vitesse réelle jusqu'à l'objectif
+            sample = need / max(reach_hours, 0.25) * ext
+            method = "atteinte"
+        elif gap <= REACHED_TOL or reach_hours is not None:
             sample = old * 1.1
             method = "suivie"
         else:
             rate = max(0.0, measured - run["start_temp"]) / hours
-            sample = rate * (1 + EXT_FACTOR * max(0.0, EXT_REF_TEMP - out)) if out is not None else rate
+            sample = rate * ext
             method = "mesurée"
         sample = round(min(SPEED_MAX, max(SPEED_MIN, sample)), 2)
         samples = [*(d.get("speed_samples") or []), sample][-10:]
@@ -649,6 +669,7 @@ class Manager:
             "target": target,
             "measured": measured,
             "gap": round(gap, 2),
+            "reached_after": round(reach_hours, 2) if reach_hours is not None else None,
             "start_temp": run["start_temp"],
             "hours": round(hours, 2),
             "outdoor": round(out, 1) if out is not None else None,

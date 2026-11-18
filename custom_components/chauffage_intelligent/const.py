@@ -121,6 +121,10 @@ PREHEAT_MIN_GAP = 3.0
 # retombe sous le seuil de relance avant l'objectif et la pièce cale).
 OVERDRIVE_MAX = 1.0
 OVERDRIVE_BAND = 1.0
+# Fin de préchauffe : dans la dernière bande, petite relance (+FINISH_PUSH)
+# tant que la pièce n'est pas à REACHED_TOL de la température visée.
+FINISH_PUSH = 0.5
+REACHED_TOL = 0.25
 RETRY_AFTER_FAILURE_MIN = 30
 REVERT_WINDOW_MIN = 45
 

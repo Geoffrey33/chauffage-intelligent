@@ -84,11 +84,14 @@ def test_preheat_min_gap():
     assert (r.target, r.send) == (21, 21.5)
     r = compute(at(0, 17, 0), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=19.5))
     assert (r.target, r.send) == (21, 21.5)
-    # à 1 °C ou moins de l'objectif : plus de dépassement
+    # à 1 °C ou moins de l'objectif : petite relance (+0,5) jusqu'à l'objectif
     r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=20))
-    assert (r.target, r.send) == (21, 21)
+    assert (r.target, r.send) == (21, 21.5)
     r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=20.5))
-    assert r.send == 21
+    assert r.send == 21.5
+    # objectif atteint : plus de relance
+    r = compute(at(0, 17, 48), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=21))
+    assert (r.target, r.send) == (21, 21)
     # préchauffe pas encore commencée : on reste en Eco
     r = compute(at(0, 16, 30), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=17))
     assert (r.target, r.send, r.reason) == (18, 18, "eco")
@@ -107,7 +110,7 @@ def test_preheat_lone_small_zone_17_11():
     r = compute(at(0, 20, 30), glob(), z, ZoneInputs(outdoor_temp=17, current_temp=19))
     assert (r.target, r.send) == (21, 22)  # relance : objectif + 1
     r = compute(at(0, 20, 45), glob(), z, ZoneInputs(outdoor_temp=17, current_temp=20))
-    assert (r.target, r.send) == (21, 21)  # fin de relance
+    assert (r.target, r.send) == (21, 21.5)  # fin de montée : petite relance
 
 
 def test_planning_catch_up():
@@ -177,3 +180,9 @@ def test_next_change_and_midnight():
     assert compute(at(1, 3), glob(), z, ZoneInputs()).reason == "planning"
     assert next_change(p, at(0, 12)) == at(0, 22)
     assert next_change(p, at(0, 23)) == at(1, 0)
+
+
+def test_planning_catch_up_no_finish_push():
+    # pendant une plage, pas de petite relance à 0,5 °C : seulement au-delà de 1 °C d'écart
+    r = compute(at(0, 19), glob(), zone(), ZoneInputs(outdoor_temp=10, current_temp=20.5))
+    assert (r.target, r.send) == (21, 21)
