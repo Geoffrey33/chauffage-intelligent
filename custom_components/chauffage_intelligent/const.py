@@ -112,9 +112,9 @@ LOOKAHEAD_DAYS = 8
 EXT_REF_TEMP = 10.0
 EXT_FACTOR = 0.04
 # Écart de relance : pendant une montée, la consigne envoyée reste au moins à cet
-# écart au-dessus de la température mesurée. Constaté le 17/11 : quand une seule
-# petite zone demande du chauffage, la PAC ne redémarre pas avec 1,5 à 2,5 °C
-# d'écart, elle redémarre à 3 °C.
+# écart au-dessus de la température mesurée. Avec certains systèmes de zonage,
+# quand une seule petite zone demande du chauffage, la PAC ne redémarre qu'avec
+# un écart d'environ 3 °C.
 PREHEAT_MIN_GAP = 3.0
 # Dépassement autorisé de la consigne envoyée au-dessus de la température visée,
 # tant que la pièce est à plus de OVERDRIVE_BAND en dessous (sinon l'écart

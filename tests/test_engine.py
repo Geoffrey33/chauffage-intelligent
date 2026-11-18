@@ -101,8 +101,8 @@ def test_preheat_min_gap():
     assert "Préchauffe → 21 °C à 18:00" == describe(r, at(0, 17, 0))
 
 
-def test_preheat_lone_small_zone_17_11():
-    # Cas réel du 17/11 : la chambre seule demande, la PAC ne repart qu'à 3 °C d'écart.
+def test_preheat_lone_small_zone():
+    # Petite zone seule à demander : la PAC ne repart qu'à 3 °C d'écart.
     plan = normalize_planning({"mon": [{"start": "21:00", "end": "23:00", "preset": "comfort"}]})
     z = zone(eco=17.5, comfort=21, speed=2.5, planning=plan)
     r = compute(at(0, 19, 55), glob(), z, ZoneInputs(outdoor_temp=17, current_temp=18))
@@ -125,7 +125,7 @@ def test_planning_catch_up():
 
 
 def test_preheat_no_drop_when_room_catches_up():
-    # La température visée ne baisse jamais pendant la montée (salon, 17/11).
+    # La température visée ne baisse jamais pendant la montée.
     z = zone(speed=2.0)
     prev = None
     temps = [18.5, 18.5, 19.0, 19.0, 19.5, 19.5, 20.0, 20.0, 20.5]
