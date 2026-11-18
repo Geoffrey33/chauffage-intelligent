@@ -22,8 +22,10 @@ from .const import (
     LOOKAHEAD_DAYS,
     MAX_TEMP,
     MIN_TEMP,
+    FINISH_PUSH,
     OVERDRIVE_BAND,
     OVERDRIVE_MAX,
+    REACHED_TOL,
     PREHEAT_MIN_GAP,
     PRESET_LABELS,
     R_ABSENCE,
@@ -293,15 +295,21 @@ def floor_half(value: float) -> float:
     return math.floor(value * 2 + 1e-9) / 2
 
 
-def overdrive(goal: float, push: float, current: float | None) -> float | None:
+def overdrive(goal: float, push: float, current: float | None, finish: bool = False) -> float | None:
     """Consigne de relance au-dessus de `goal`, ou None si inutile.
 
-    Seulement tant que la pièce est à plus de OVERDRIVE_BAND sous l'objectif,
-    et jamais plus de OVERDRIVE_MAX au-dessus.
+    Tant que la pièce est à plus de OVERDRIVE_BAND sous l'objectif : jusqu'à
+    OVERDRIVE_MAX au-dessus. Avec `finish` (préchauffe), la relance continue
+    ensuite à +FINISH_PUSH jusqu'à REACHED_TOL de l'objectif : sinon la PAC
+    peut s'arrêter un demi-degré trop bas.
     """
-    if current is None or current >= goal - OVERDRIVE_BAND or push <= goal:
+    if current is None or push <= goal:
         return None
-    return min(goal + OVERDRIVE_MAX, push)
+    if current < goal - OVERDRIVE_BAND:
+        return min(goal + OVERDRIVE_MAX, push)
+    if finish and current < goal - REACHED_TOL:
+        return goal + FINISH_PUSH
+    return None
 
 
 def catch_up(goal: float, current: float | None) -> float | None:
@@ -345,7 +353,7 @@ def ramp(
     command = None
     if value > base and current is not None:
         push = max(value, floor_half(min(current, value) + PREHEAT_MIN_GAP))
-        command = overdrive(temp, push, current)
+        command = overdrive(temp, push, current, finish=True)
         value = min(push, temp)
     return value, start, temp, command
 

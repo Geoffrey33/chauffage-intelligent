@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 1.2.5
+- **Apprentissage de la vitesse de chauffe corrigé** : quand une pièce atteint sa température visée avant l'heure, la vitesse est désormais calculée sur le temps réellement mis pour l'atteindre. Avant, elle était calculée avec la température relevée au début de la plage ; une pièce arrivée en avance puis légèrement redescendue (PAC à l'arrêt) faisait baisser la vitesse apprise, donc démarrer les préchauffes suivantes de plus en plus tôt. Nouvelle méthode « atteinte » dans le détail de la dernière mesure.
+- **Fin de préchauffe** : dans le dernier degré avant l'objectif, la consigne envoyée reste 0,5 °C au-dessus de la température visée jusqu'à ce que la pièce l'atteigne. Avant, la relance s'arrêtait à 1 °C de l'objectif et la PAC pouvait s'arrêter un demi-degré trop bas. Hors préchauffe, rien ne change.
+
 ## 1.2.4
 - **Relance de la PAC** : constaté le 17/11, quand une seule petite zone demande du chauffage (chambre), la PAC ne redémarre pas avec 1,5 à 2,5 °C d'écart ; elle redémarre à 3 °C. L'écart minimum pendant une préchauffe passe donc de 1,5 à **3 °C**.
 - **Dépassement temporaire de la consigne envoyée** : tant que la pièce est à plus de 1 °C sous la température visée (préchauffe, début de plage, retour prévu en absence), la consigne envoyée au Koolnova peut dépasser l'objectif de 1 °C au maximum, pour que l'écart ne retombe pas sous le seuil de relance avant l'arrivée. La température visée affichée et l'apprentissage ne changent pas.
