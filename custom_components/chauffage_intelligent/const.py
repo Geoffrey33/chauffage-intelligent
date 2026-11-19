@@ -125,6 +125,9 @@ OVERDRIVE_BAND = 1.0
 # tant que la pièce n'est pas à REACHED_TOL de la température visée.
 FINISH_PUSH = 0.5
 REACHED_TOL = 0.25
+# Préchauffe sans montée (PAC qui n'a pas répondu) : pas d'apprentissage.
+NO_RISE_MAX = 0.5
+NO_RISE_MIN_HOURS = 1.0
 RETRY_AFTER_FAILURE_MIN = 30
 REVERT_WINDOW_MIN = 45
 

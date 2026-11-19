@@ -322,6 +322,22 @@ async def test_learning_uses_time_reached(hass, setup, freezer):
     assert zone.data["speed"] > 2.5
 
 
+async def test_learning_ignored_if_no_rise(hass, setup, freezer):
+    """La pièce ne monte pas du tout : la vitesse ne change pas."""
+    entry, kool = setup
+    freezer.move_to(datetime(2026, 11, 16, 16, 58, tzinfo=TZ))
+    kool.set_state("heat", kool.temp, current=18.0)
+    await tick(hass, freezer, 2)
+    zone = next(iter(entry.runtime_data.zones.values()))
+    assert zone.data["preheat_run"]["start_temp"] == 18.0
+    freezer.move_to(datetime(2026, 11, 16, 17, 59, tzinfo=TZ))
+    kool.set_state("heat", kool.temp, current=18.0)
+    await tick(hass, freezer, 1)
+    assert zone.data["speed"] == 2.5
+    assert zone.data["last_learning"]["method"].startswith("ignorée")
+    assert zone.data.get("speed_samples") in (None, [])
+
+
 async def test_learning_ignored_if_window(hass, setup, freezer):
     entry, kool = setup
     freezer.move_to(datetime(2026, 11, 16, 16, 58, tzinfo=TZ))
