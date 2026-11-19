@@ -79,6 +79,8 @@ from .const import (
     GLOBAL_VACATION,
     EXT_FACTOR,
     REACHED_TOL,
+    NO_RISE_MAX,
+    NO_RISE_MIN_HOURS,
     EXT_REF_TEMP,
     R_ABSENCE_ARRIVAL,
     R_ABSENCE_PREHEAT,
@@ -560,6 +562,8 @@ class Manager:
           réelle jusqu'à ce moment (la pièce peut redescendre ensuite, PAC arrêtée) ;
         - la pièce a suivi la rampe (écart ≤ 0,25 °C) : elle sait chauffer au moins à la vitesse
           demandée, l'échantillon vaut vitesse × 1,1 (on sonde prudemment vers le haut) ;
+        - la pièce n'a pas monté (moins de 0,5 °C en 1 h ou plus) : la PAC n'a pas répondu,
+          aucune mesure n'est retenue et une notification est envoyée ;
         - sinon : l'échantillon est la vitesse réellement mesurée (montée / durée), ramenée à
           10 °C dehors.
         La vitesse retenue est la médiane des 7 derniers échantillons : une mauvaise journée
@@ -639,6 +643,38 @@ class Manager:
         out = run["out_sum"] / run["out_n"] if run.get("out_n") else None
         gap = target - measured
         old = float(d["speed"])
+        rise = measured - run["start_temp"]
+        if not run.get("reached_at") and hours >= NO_RISE_MIN_HOURS and rise < NO_RISE_MAX:
+            # La pièce n'a pas monté du tout : ce n'est pas une vitesse de chauffe,
+            # la PAC n'a pas répondu (arrêt, défaut, dégivrage prolongé…). Pas d'apprentissage.
+            d["last_learning"] = {
+                "at": now.isoformat(),
+                "target": target,
+                "measured": measured,
+                "gap": round(gap, 2),
+                "reached_after": None,
+                "start_temp": run["start_temp"],
+                "hours": round(hours, 2),
+                "outdoor": round(out, 1) if out is not None else None,
+                "method": "ignorée (pas de montée)",
+                "sample": None,
+                "samples": len(d.get("speed_samples") or []),
+                "old_speed": old,
+                "new_speed": old,
+            }
+            _LOGGER.warning(
+                "%s : pas de montée en %.1f h de préchauffe (%.1f → %.1f °C), mesure ignorée",
+                zone.name, hours, run["start_temp"], measured,
+            )
+            self.hass.async_create_task(
+                self._notify(
+                    "Chauffage",
+                    f"⚠️ {zone.name} : la température n'a pas monté pendant la préchauffe "
+                    f"({run['start_temp']:.1f} → {measured:.1f} °C en {hours:.1f} h). "
+                    "Vérifiez la PAC.",
+                )
+            )
+            return
         reached = _dt(run["reached_at"]) if run.get("reached_at") else None
         reach_hours = (reached - started).total_seconds() / 3600 if reached and started else None
         ext = (1 + EXT_FACTOR * max(0.0, EXT_REF_TEMP - out)) if out is not None else 1.0

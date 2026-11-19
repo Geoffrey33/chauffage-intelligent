@@ -1,5 +1,8 @@
 # Historique des versions
 
+## 1.2.6
+- **Préchauffe sans effet ignorée par l'apprentissage** : si une pièce ne monte pas d'au moins 0,5 °C pendant une préchauffe d'une heure ou plus, c'est que la PAC n'a pas répondu (arrêt, défaut, dégivrage prolongé…), pas que la pièce est lente. La mesure n'est plus retenue (méthode « ignorée (pas de montée) » dans le détail de la dernière mesure) et une notification est envoyée pour vérifier la PAC. Avant, ces préchauffes faisaient chuter la vitesse apprise et démarrer les suivantes beaucoup trop tôt.
+
 ## 1.2.5
 - **Apprentissage de la vitesse de chauffe corrigé** : quand une pièce atteint sa température visée avant l'heure, la vitesse est désormais calculée sur le temps réellement mis pour l'atteindre. Avant, elle était calculée avec la température relevée au début de la plage ; une pièce arrivée en avance puis légèrement redescendue (PAC à l'arrêt) faisait baisser la vitesse apprise, donc démarrer les préchauffes suivantes de plus en plus tôt. Nouvelle méthode « atteinte » dans le détail de la dernière mesure.
 - **Fin de préchauffe** : dans le dernier degré avant l'objectif, la consigne envoyée reste 0,5 °C au-dessus de la température visée jusqu'à ce que la pièce l'atteigne. Avant, la relance s'arrêtait à 1 °C de l'objectif et la PAC pouvait s'arrêter un demi-degré trop bas. Hors préchauffe, rien ne change.
