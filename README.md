@@ -40,14 +40,26 @@ type: custom:chauffage-intelligent-card
 title: Chauffage
 # show_global: true   # mode maison et puces d'état
 # group: true         # pièces principales / peu utilisées
-# zones: [climate.salon, climate.cuisine]   # vide = toutes
+# zones: [climate.sejour, climate.chambre_1]   # vide = toutes
 ```
 
-Toucher une pièce ouvre sa fenêtre de réglage :
-- **Pilotage** : mode, réglage ponctuel, boost.
-- **Planning** : éditeur de la semaine. Touche une zone vide pour ajouter une plage, fais glisser une plage ou ses bords, puis copie un jour vers d'autres jours ou reprends le planning d'une autre pièce.
-- **Historique** : courbe mesure / consigne sur 24 h ou 7 jours, temps de chauffe, température moyenne, part du temps à la consigne.
-- **Réglages** : consignes, préchauffe, vitesse apprise, état de la synchronisation.
+Toucher une pièce ouvre sa fenêtre de réglage, en quatre onglets.
+
+| Pilotage | Planning |
+|---|---|
+| ![Pilotage](docs/pilotage.png) | ![Planning](docs/planning.png) |
+| **Cadran de thermostat** (consigne, mesure, − / + pour un réglage ponctuel), mode de la pièce en vignettes avec leur valeur, boost avec temps restant, planning du jour. | **Éditeur de la semaine** : touche une zone vide pour ajouter une plage, fais glisser une plage ou ses bords. Temps de confort par jour et par semaine, copie de jours, reprise du planning d'une autre pièce, modèles. |
+
+| Historique | Réglages |
+|---|---|
+| ![Historique](docs/historique.png) | ![Réglages](docs/reglages.png) |
+| **Chiffres clés** (chauffe du jour et de la période, température moyenne, temps à la consigne), courbe mesure / consigne sur 24 h ou 7 jours, temps de chauffe par jour. | **Consignes** sur une échelle colorée, préchauffe avec vitesse apprise et détail de la dernière mesure, état de la pièce (synchronisation, fenêtres). |
+
+La carte suit le thème clair ou sombre de Home Assistant :
+
+![Carte en thème clair](docs/carte-claire.png)
+
+*Captures réalisées avec des pièces et des données de démonstration.*
 
 ## Ordre de priorité
 
