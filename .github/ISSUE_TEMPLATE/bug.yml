@@ -1,0 +1,36 @@
+name: Signaler un problème / Bug report
+description: Quelque chose ne fonctionne pas comme prévu.
+labels: [bug]
+body:
+  - type: textarea
+    id: description
+    attributes:
+      label: Description
+      description: Que se passe-t-il, et qu'attendais-tu ? / What happens, and what did you expect?
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version de l'intégration / Integration version
+      placeholder: "1.3.0"
+    validations:
+      required: true
+  - type: input
+    id: ha_version
+    attributes:
+      label: Version de Home Assistant / Home Assistant version
+      placeholder: "2026.11.1"
+    validations:
+      required: true
+  - type: input
+    id: device
+    attributes:
+      label: Équipement piloté / Controlled device
+      description: Intégration qui fournit les entités climate (Koolnova, Airzone, TRV…)
+  - type: textarea
+    id: logs
+    attributes:
+      label: Journaux / Logs
+      description: Paramètres → Système → Journaux, filtrer sur « chauffage_intelligent ».
+      render: text
