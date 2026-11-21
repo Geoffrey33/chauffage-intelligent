@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from homeassistant.const import Platform
 
 DOMAIN = "chauffage_intelligent"
 NAME = "Chauffage intelligent"
-VERSION = "1.2.0"
+VERSION = json.loads((Path(__file__).parent / "manifest.json").read_text(encoding="utf-8"))["version"]
 
 PLATFORMS: list[Platform] = [
     Platform.BINARY_SENSOR,
