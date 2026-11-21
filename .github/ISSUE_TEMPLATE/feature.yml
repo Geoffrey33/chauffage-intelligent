@@ -1,0 +1,11 @@
+name: Proposer une amélioration / Feature request
+description: Une idée pour améliorer l'intégration ou la carte.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: Idée / Idea
+      description: Que voudrais-tu pouvoir faire ? / What would you like to be able to do?
+    validations:
+      required: true

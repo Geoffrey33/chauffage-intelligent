@@ -3,7 +3,7 @@
  */
 (() => {
   const DOMAIN = "chauffage_intelligent";
-  const CARD_VERSION = "1.2.9";
+  const CARD_VERSION = "1.3.0";
   const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   const DAY_SHORT = { mon: "Lun", tue: "Mar", wed: "Mer", thu: "Jeu", fri: "Ven", sat: "Sam", sun: "Dim" };
   const DAY_LONG = { mon: "lundi", tue: "mardi", wed: "mercredi", thu: "jeudi", fri: "vendredi", sat: "samedi", sun: "dimanche" };
@@ -818,10 +818,11 @@
       const ticks = [0, 3, 6, 9, 12, 15, 18, 21, 24].map((h) => `<span class="tick" style="left:${(h / 24) * 100}%"></span>`).join("");
       const blocks = slots.map((sl, i) => {
         const l = (toMin(sl.start) / 1440) * 100, w = ((toMin(sl.end) - toMin(sl.start)) / 1440) * 100;
+        const px = (w / 100) * (Math.min(760, window.innerWidth) - (window.innerWidth <= 600 ? 140 : 170));
         const sel = editable && this._sel && this._sel.day === day && this._sel.index === i;
         return `<div class="slot ${sel ? "sel" : ""}" title="${sl.start} – ${sl.end} · ${fmtT(slotTemp(sl, a))}" data-day="${day}" data-i="${i}" style="left:${l}%;width:${w}%;background:${PRESETS[sl.preset].color}">
           ${editable ? `<span class="h l" data-h="l"></span><span class="h r" data-h="r"></span>` : ""}
-          ${w >= 17 ? `<span class="st"><b>${fmtT(slotTemp(sl, a))}</b> ${sl.start}–${sl.end}</span>` : w >= 4.5 ? `<span class="st"><b>${fmtT(slotTemp(sl, a))}</b></span>` : ""}</div>`;
+          ${px >= 120 ? `<span class="st"><b>${fmtT(slotTemp(sl, a))}</b> ${sl.start}–${sl.end}</span>` : px >= 30 ? `<span class="st"><b>${fmtT(slotTemp(sl, a))}</b></span>` : ""}</div>`;
       }).join("");
       const now = day === todayKey() ? `<div class="nowline" style="left:${(nowMin() / 1440) * 100}%"></div>` : "";
       return `<div class="track ${editable ? "edit" : ""}" data-track="${day}">${ticks}${blocks}${now}</div>`;
@@ -849,6 +850,8 @@
           <div class="pfoot"><span class="muted">${fmtH(week)} de confort sur la semaine</span></div>
         </div>
         ${this._sel ? this._slotEditor(a) : `<div class="hint center"><ha-icon icon="mdi:gesture-tap"></ha-icon> Touche une zone vide pour ajouter une plage · fais glisser une plage ou ses bords (pas de ${SNAP} min)</div>`}
+        <details class="toolsbox" ${window.innerWidth > 600 || this._toolsOpen ? "open" : ""}>
+          <summary><ha-icon icon="mdi:tools"></ha-icon>Outils<span class="muted">copier un jour · autre pièce · modèles</span><ha-icon class="chev" icon="mdi:chevron-down"></ha-icon></summary>
         <div class="tools2">
           <div class="tool">
             <div class="tool-h"><ha-icon icon="mdi:content-copy"></ha-icon>Copier un jour</div>
@@ -869,6 +872,7 @@
             <button class="btn danger" data-clear><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Tout effacer</button>
           </div>
         </div>
+        </details>
         <div class="savebar ${this._dirty ? "dirty" : ""}">
           <span class="sv-st"><ha-icon icon="${this._dirty ? "mdi:pencil-circle" : "mdi:check-circle"}"></ha-icon>${this._dirty ? "Modifications non enregistrées" : "Planning enregistré"}</span>
           <button class="btn" data-cancel ${this._dirty ? "" : "disabled"}>Annuler</button>
@@ -1023,6 +1027,7 @@
         this._copyDays.has(d) ? this._copyDays.delete(d) : this._copyDays.add(d);
         this._render();
       }));
+      root.querySelector(".toolsbox")?.addEventListener("toggle", (e) => { this._toolsOpen = e.target.open; });
       root.querySelector("[data-copy]")?.addEventListener("click", () => {
         const src = this._copyFrom || "mon";
         this._setDraft((d) => { for (const t of this._copyDays) if (t !== src) d[t] = clone(d[src] || []); });
@@ -1099,10 +1104,10 @@
 
   const DIALOG_CSS = `
     :host { position: fixed; inset: 0; z-index: 8; display: flex; align-items: center; justify-content: center; font-family: var(--paper-font-body1_-_font-family, Roboto, sans-serif); color: var(--primary-text-color); }
-    .backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .45); }
-    .dlg { position: relative; width: min(760px, 100vw); max-height: min(92vh, 100%); overflow: auto; background: var(--card-background-color, #fff);
+    .backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, .6); -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); }
+    .dlg { position: relative; width: min(760px, 100vw); max-height: min(92vh, 100%); overflow: auto; overscroll-behavior: contain; background-color: var(--primary-background-color, #fafafa); background-image: linear-gradient(var(--ha-card-background, var(--card-background-color, #fff)), var(--ha-card-background, var(--card-background-color, #fff)));
       border-radius: 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, .3); padding: 18px 18px 12px; }
-    @media (max-width: 600px) { .dlg { border-radius: 18px 18px 0 0; align-self: flex-end; max-height: 94vh; } }
+    @media (max-width: 600px) { .dlg { border-radius: 18px 18px 0 0; align-self: flex-end; max-height: 94vh; padding: 16px 14px calc(10px + env(safe-area-inset-bottom)); } .name { font-size: 20px; } }
     .head { display: flex; justify-content: space-between; gap: 10px; }
     .name { font-size: 22px; font-weight: 500; }
     .sub { color: var(--secondary-text-color); font-size: 14px; margin-top: 2px; }
@@ -1287,6 +1292,7 @@
     .b-ch button { font: inherit; font-size: 13px; border: none; border-radius: 10px; padding: 8px 12px; cursor: pointer; background: color-mix(in srgb, var(--ci-comfort-plus) 18%, transparent); color: var(--primary-text-color); }
     .b-ch button:hover { background: color-mix(in srgb, var(--ci-comfort-plus) 32%, transparent); }
     .hl.tl { margin-top: 2px; }
+    @media (max-width: 600px) { .b-ch { width: 100%; } .b-ch button { flex: 1; } }
 
     .legend2 { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 12px; font-size: 12px; }
     .lgc { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--c) 16%, transparent); }
@@ -1295,6 +1301,7 @@
     .pgrid .hours, .pgrid .prow { grid-template-columns: 40px 1fr 46px; }
     .pgrid .track { background: var(--card-background-color); }
     .prow.today .dname { color: var(--primary-color); font-weight: 600; }
+    @media (max-width: 600px) { .pgrid { padding: 8px 6px 4px; } .pgrid .hours, .pgrid .prow { grid-template-columns: 30px 1fr 36px; gap: 5px; } .dname { font-size: 12px; } .dtot { font-size: 10.5px; } .legend2 { gap: 4px; } .lgc { padding: 3px 8px; } .track { height: 30px; } }
     .dname i { display: block; font-style: normal; font-size: 9.5px; font-weight: 400; }
     .dtot { font-size: 11.5px; text-align: right; color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
     .prow.today .track { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--primary-color) 60%, transparent); }
@@ -1317,6 +1324,13 @@
     .ed-p button.on { border-color: var(--c); box-shadow: 0 0 0 1px var(--c) inset; background: color-mix(in srgb, var(--c) 14%, var(--card-background-color)); }
     .editor2 input[type=number] { font: inherit; width: 80px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); }
     .editor2 .btn.danger { align-self: flex-start; }
+    .toolsbox { margin-top: 12px; }
+    .toolsbox summary { list-style: none; display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 10px 12px; border-radius: 14px; background: var(--secondary-background-color); font-weight: 500; font-size: 14px; }
+    .toolsbox summary::-webkit-details-marker { display: none; }
+    .toolsbox summary .muted { font-weight: 400; font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .toolsbox summary ha-icon { --mdc-icon-size: 18px; color: var(--primary-color); }
+    .toolsbox summary .chev { color: var(--secondary-text-color); transition: transform .2s; }
+    .toolsbox[open] summary .chev { transform: rotate(180deg); }
     .tools2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-top: 12px; }
     .tool { border-radius: 14px; background: var(--secondary-background-color); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
     .tool-h { display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 14px; }
@@ -1344,7 +1358,7 @@
     .dbar:last-child .db { box-shadow: 0 0 0 2px var(--primary-text-color); }
     .dv { font-size: 10.5px; color: var(--secondary-text-color); white-space: nowrap; }
     .dl { font-size: 12px; }
-    .savebar { position: sticky; bottom: -12px; background: var(--card-background-color); display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--divider-color); margin-top: 6px; }
+    .savebar { position: sticky; bottom: calc(-12px - env(safe-area-inset-bottom)); z-index: 2; background-color: var(--primary-background-color, #fafafa); background-image: linear-gradient(var(--ha-card-background, var(--card-background-color, #fff)), var(--ha-card-background, var(--card-background-color, #fff))); padding-bottom: calc(10px + env(safe-area-inset-bottom)); display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--divider-color); margin-top: 6px; }
     .savebar .muted { margin-right: auto; font-size: 13px; }
   `;
 

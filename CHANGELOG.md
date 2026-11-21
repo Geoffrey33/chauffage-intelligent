@@ -1,5 +1,14 @@
 # Historique des versions
 
+## 1.3.0
+- **Affichage sur téléphone** :
+  - fenêtre des pièces toujours opaque, même avec un thème à fond transparent, et fond flouté derrière ;
+  - texte des plages adapté à la largeur réelle (température seule quand la place manque) ;
+  - grille du planning plus compacte, outils du planning repliables ;
+  - barre d'enregistrement et bas de fenêtre au-dessus de la barre de navigation du téléphone ;
+  - boutons de boost sur toute la largeur.
+- **Publication** : README avec boutons d'installation My Home Assistant, badges et section en anglais, modèles de tickets, validation HACS complète (sans exception).
+
 ## 1.2.9
 - **Pilotage** : grand cadran de thermostat (consigne, mesure, couleur selon la situation, boutons − / + pour un réglage ponctuel), modes de la pièce en vignettes avec leur valeur, carte Boost avec temps restant et barre de progression, planning du jour avec heures et prochain changement.
 - **Planning** : légende en pastilles, jour actuel mis en avant, horaires et température écrits dans les plages, temps de confort par jour et par semaine, éditeur de plage en carte (début / fin, type de plage en vignettes), outils regroupés (copier un jour, autre pièce, modèles), état d'enregistrement visible.
