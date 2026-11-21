@@ -1,5 +1,12 @@
 # Historique des versions
 
+## 1.2.7
+- **Nouvel onglet Réglages des pièces** :
+  - échelle colorée situant Eco, Confort, Confort + et la température mesurée ;
+  - une carte par consigne (couleur, icône, rappel de son usage, gros boutons − / +) ;
+  - préchauffe : interrupteur, vitesse apprise traduite en durée (« Eco → Confort en ~1 h »), graphique des mesures avec la valeur retenue, résumé de la dernière préchauffe (départ, arrivée, objectif, durée, temps pour atteindre l'objectif, extérieur, ancienne et nouvelle vitesse) ;
+  - informations de la pièce avec pastilles d'état (synchronisation, fenêtres).
+
 ## 1.2.6
 - **Préchauffe sans effet ignorée par l'apprentissage** : si une pièce ne monte pas d'au moins 0,5 °C pendant une préchauffe d'une heure ou plus, c'est que la PAC n'a pas répondu (arrêt, défaut, dégivrage prolongé…), pas que la pièce est lente. La mesure n'est plus retenue (méthode « ignorée (pas de montée) » dans le détail de la dernière mesure) et une notification est envoyée pour vérifier la PAC. Avant, ces préchauffes faisaient chuter la vitesse apprise et démarrer les suivantes beaucoup trop tôt.
 

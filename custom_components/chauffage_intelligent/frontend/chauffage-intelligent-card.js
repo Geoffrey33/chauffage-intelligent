@@ -3,7 +3,7 @@
  */
 (() => {
   const DOMAIN = "chauffage_intelligent";
-  const CARD_VERSION = "1.2.0";
+  const CARD_VERSION = "1.2.7";
   const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   const DAY_SHORT = { mon: "Lun", tue: "Mar", wed: "Mer", thu: "Jeu", fri: "Ven", sat: "Sam", sun: "Dim" };
   const DAY_LONG = { mon: "lundi", tue: "mardi", wed: "mercredi", thu: "jeudi", fri: "vendredi", sat: "samedi", sun: "dimanche" };
@@ -633,34 +633,101 @@
 
     // ------------------------------------------------------------ Réglages
     _settingsHtml(a) {
-      const stepper = (key, label, val, step = 0.5, unit = "°") => `
-        <div class="set">
-          <span class="set-label">${label}</span>
-          <div class="stepper">
-            <button class="icon" data-set="${key}" data-delta="${-step}"><ha-icon icon="mdi:minus"></ha-icon></button>
-            <span class="val">${Number(val).toLocaleString("fr-FR", { maximumFractionDigits: 2 })}${unit}</span>
-            <button class="icon" data-set="${key}" data-delta="${step}"><ha-icon icon="mdi:plus"></ha-icon></button>
-          </div>
+      const n = (v, d = 1) => Number(v).toLocaleString("fr-FR", { maximumFractionDigits: d });
+      const presets = [
+        ["eco", "Eco", "mdi:leaf", "var(--ci-eco)", "Hors plages"],
+        ["comfort", "Confort", "mdi:sofa", "var(--ci-comfort)", "Plages du planning"],
+        ["comfort_plus", "Confort +", "mdi:fire", "var(--ci-comfort-plus)", "Plages renforcées"],
+      ];
+      // échelle
+      const vals = [a.eco, a.comfort, a.comfort_plus, a.current_temperature].filter((v) => v != null).map(Number);
+      const lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
+      const pos = (v) => ((Number(v) - lo) / (hi - lo)) * 100;
+      const ticks = [];
+      for (let v = lo; v <= hi; v++) ticks.push(`<span class="sc-tick ${v % 2 ? "" : "major"}" style="left:${pos(v)}%">${v % 2 ? "" : `<i>${v}°</i>`}</span>`);
+      const scale = `
+        <div class="scale">
+          <div class="sc-bar"></div>
+          ${ticks.join("")}
+          ${presets.map(([k, l, , c]) => `<span class="sc-pin" style="left:${pos(a[k])}%;--c:${c}" title="${l} ${fmtT(a[k])}"><b>${fmtT(a[k])}</b></span>`).join("")}
+          ${a.current_temperature != null ? `<span class="sc-now" style="left:${pos(a.current_temperature)}%" title="Mesuré"><b>${fmtT(a.current_temperature)}</b></span>` : ""}
         </div>`;
+      const cards = presets.map(([k, l, icon, c, hint]) => `
+        <div class="pc" style="--c:${c}">
+          <div class="pc-head"><span class="pc-ic"><ha-icon icon="${icon}"></ha-icon></span><span class="pc-l">${l}<small>${hint}</small></span></div>
+          <div class="pc-v">${n(a[k])}<span>°</span></div>
+          <div class="pc-btns">
+            <button data-set="${k}" data-delta="-0.5" aria-label="${l} moins"><ha-icon icon="mdi:minus"></ha-icon></button>
+            <button data-set="${k}" data-delta="0.5" aria-label="${l} plus"><ha-icon icon="mdi:plus"></ha-icon></button>
+          </div>
+        </div>`).join("");
+
+      // préchauffe
+      const samples = (a.speed_samples || []).map(Number);
+      const maxS = Math.max(5, ...samples, Number(a.speed) || 0);
+      const bars = samples.length
+        ? `<div class="spark">${samples.map((v, i) => `<span class="sb ${i === samples.length - 1 ? "last" : ""}" style="height:${Math.max(8, (v / maxS) * 100)}%" title="${n(v, 2)} °C/h"></span>`).join("")}
+             <span class="sp-line" style="bottom:${(Number(a.speed) / maxS) * 100}%"></span></div>`
+        : `<div class="spark empty">Aucune mesure</div>`;
+      const rise = Number(a.comfort) - Number(a.eco);
+      const mins = a.speed ? Math.round((rise / Number(a.speed)) * 60) : null;
+      const dur = (m) => (m == null ? "—" : m < 60 ? `${m} min` : `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, "0")}`);
       const ll = a.last_learning;
-      const sync = { ok: "Synchronisé", pending: "Envoi en cours…", verifying: "Vérification…", failed: "Consigne non prise par le Koolnova", unavailable: "Koolnova indisponible", engine_off: "Moteur coupé", init: "Démarrage…" }[a.sync_status] || a.sync_status;
+      const llHtml = ll ? `
+        <div class="last">
+          <div class="last-h"><ha-icon icon="mdi:history"></ha-icon>Dernière préchauffe · ${new Date(ll.at).toLocaleDateString("fr-FR", { weekday: "short", day: "numeric", month: "short" })} ${new Date(ll.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>
+          <div class="last-row">
+            <span class="lt">${fmtT(ll.start_temp)}</span>
+            <span class="arrow"><i style="width:${Math.min(100, Math.max(8, ((Number(ll.measured) - Number(ll.start_temp)) / Math.max(0.5, Number(ll.target) - Number(ll.start_temp))) * 100))}%"></i></span>
+            <span class="lt">${fmtT(ll.measured)}<small>/ ${fmtT(ll.target)}</small></span>
+          </div>
+          <div class="last-meta">
+            <span><ha-icon icon="mdi:timer-outline"></ha-icon>${dur(Math.round(Number(ll.hours) * 60))} de préchauffe</span>
+            ${ll.reached_after != null ? `<span><ha-icon icon="mdi:flag-checkered"></ha-icon>objectif atteint en ${dur(Math.round(Number(ll.reached_after) * 60))}</span>` : ""}
+            ${ll.outdoor != null ? `<span><ha-icon icon="mdi:weather-cloudy"></ha-icon>${fmtT(ll.outdoor)} dehors</span>` : ""}
+            <span><ha-icon icon="mdi:speedometer"></ha-icon>${n(ll.old_speed, 2)} → ${n(ll.new_speed, 2)} °C/h</span>
+          </div>
+        </div>` : `<div class="hint">Aucune préchauffe mesurée pour l'instant.</div>`;
+
+      // état
+      const syncMap = { ok: ["Synchronisé", "ok"], pending: ["Envoi en cours…", "wait"], verifying: ["Vérification…", "wait"], failed: ["Consigne non prise", "err"], unavailable: ["Indisponible", "err"], engine_off: ["Moteur coupé", "wait"], init: ["Démarrage…", "wait"] };
+      const [syncTxt, syncCls] = syncMap[a.sync_status] || [a.sync_status, "wait"];
+      const nWin = (a.windows || []).length;
       return `
         <div class="section">
           <div class="label">Consignes</div>
-          ${stepper("eco", `<span class="dot" style="background:var(--ci-eco)"></span>Eco`, a.eco)}
-          ${stepper("comfort", `<span class="dot" style="background:var(--ci-comfort)"></span>Confort`, a.comfort)}
-          ${stepper("comfort_plus", `<span class="dot" style="background:var(--ci-comfort-plus)"></span>Confort +`, a.comfort_plus)}
+          ${scale}
+          <div class="pcs">${cards}</div>
         </div>
         <div class="section">
-          <div class="label">Préchauffe</div>
-          <label class="switch-row"><input type="checkbox" data-preheat ${a.preheat ? "checked" : ""}> Anticiper pour que la température soit atteinte à l'heure du planning</label>
-          ${stepper("speed", "Vitesse de chauffe", a.speed, 0.1, " °C/h")}
-          <div class="hint">Mesurée à chaque préchauffe (ramenée à 10 °C dehors), puis lissée sur les 7 dernières mesures${(a.speed_samples || []).length ? ` (${a.speed_samples.length} mesure${a.speed_samples.length > 1 ? "s" : ""})` : ""}.${ll ? ` Dernière mesure le ${new Date(ll.at).toLocaleDateString("fr-FR")} : ${fmtT(ll.start_temp ?? ll.measured)} → ${fmtT(ll.measured)}${ll.hours ? ` en ${String(ll.hours).replace(".", ",")} h` : ""} pour ${fmtT(ll.target)} visés${ll.outdoor != null ? `, ${fmtT(ll.outdoor)} dehors` : ""} : vitesse ${ll.old_speed} → ${ll.new_speed} °C/h.` : " Aucune mesure pour l'instant."}</div>
+          <div class="row" style="justify-content:space-between">
+            <div class="label">Préchauffe</div>
+            <label class="sw"><input type="checkbox" data-preheat ${a.preheat ? "checked" : ""}><span></span>${a.preheat ? "Activée" : "Désactivée"}</label>
+          </div>
+          <div class="ph ${a.preheat ? "" : "off"}">
+            <div class="ph-main">
+              <div class="ph-v">${n(a.speed, 2)}<span> °C/h</span></div>
+              <div class="ph-sub">Eco → Confort en ~${dur(mins)} <small>(à 10° dehors)</small></div>
+              <div class="pc-btns small">
+                <button data-set="speed" data-delta="-0.1" aria-label="Vitesse moins"><ha-icon icon="mdi:minus"></ha-icon></button>
+                <button data-set="speed" data-delta="0.1" aria-label="Vitesse plus"><ha-icon icon="mdi:plus"></ha-icon></button>
+              </div>
+            </div>
+            <div class="ph-spark">
+              ${bars}
+              <div class="hint">${samples.length} mesure${samples.length > 1 ? "s" : ""} · médiane des 7 dernières</div>
+            </div>
+          </div>
+          ${llHtml}
+          <div class="hint">Un réglage manuel de la vitesse repart de zéro pour l'apprentissage.</div>
         </div>
         <div class="section">
-          <div class="label">État</div>
-          <div class="kv"><span>Koolnova</span><span>${esc(a.koolnova_entity)} · ${esc(sync)}</span></div>
-          <div class="kv"><span>Fenêtres</span><span>${(a.windows || []).length ? (a.window_open ? "ouverte" : "fermées") : "aucun capteur"}</span></div>
+          <div class="label">Pièce</div>
+          <div class="info">
+            <div class="ir"><ha-icon icon="mdi:hvac"></ha-icon><span class="ik">Zone Koolnova</span><span class="iv">${esc(a.koolnova_entity)}</span><span class="st ${syncCls}">${esc(syncTxt)}</span></div>
+            <div class="ir"><ha-icon icon="${a.window_open ? "mdi:window-open-variant" : "mdi:window-closed-variant"}"></ha-icon><span class="ik">Fenêtres</span><span class="iv">${nWin ? `${nWin} capteur${nWin > 1 ? "s" : ""}` : "Aucun capteur"}</span>${nWin ? `<span class="st ${a.window_open ? "wait" : "ok"}">${a.window_open ? "Ouverte" : "Fermées"}</span>` : ""}</div>
+            <div class="ir"><ha-icon icon="mdi:home-variant-outline"></ha-icon><span class="ik">Type</span><span class="iv">${a.usage === "secondary" ? "Pièce peu utilisée" : "Pièce principale"}</span></div>
+          </div>
           <a class="btn" href="/config/integrations/integration/${DOMAIN}" data-nav><ha-icon icon="mdi:cog"></ha-icon>Capteurs et options de la pièce</a>
         </div>`;
     }
@@ -1012,6 +1079,71 @@
     .stat { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 12px; background: var(--secondary-background-color); }
     .stat .v { font-size: 20px; font-weight: 500; }
     .stat .k { font-size: 12px; color: var(--secondary-text-color); }
+
+    .scale { position: relative; height: 62px; margin: 6px 6px 4px; }
+    .sc-bar { position: absolute; left: 0; right: 0; top: 30px; height: 8px; border-radius: 4px; background: linear-gradient(90deg, #42a5f5, var(--ci-eco) 30%, var(--ci-comfort) 65%, var(--ci-comfort-plus)); opacity: .85; }
+    .sc-tick { position: absolute; top: 40px; width: 1px; height: 5px; background: var(--divider-color); }
+    .sc-tick.major { height: 7px; background: var(--secondary-text-color); opacity: .6; }
+    .sc-tick i { position: absolute; top: 8px; left: 50%; transform: translateX(-50%); font-style: normal; font-size: 10px; color: var(--secondary-text-color); }
+    .sc-pin { position: absolute; top: 0; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; }
+    .sc-pin b { font-size: 11px; font-weight: 600; color: #fff; background: var(--c); padding: 2px 6px; border-radius: 8px; white-space: nowrap; }
+    .sc-pin::after { content: ""; width: 2px; height: 14px; background: var(--c); }
+    .sc-now { position: absolute; top: 26px; transform: translateX(-50%); width: 16px; height: 16px; border-radius: 50%; background: var(--card-background-color); border: 3px solid var(--primary-text-color); box-sizing: border-box; }
+    .sc-now b { position: absolute; top: 26px; left: 50%; transform: translateX(-50%); font-size: 10px; white-space: nowrap; color: var(--primary-text-color); }
+    .pcs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 18px; }
+    .pc { border-radius: 14px; padding: 10px; background: linear-gradient(160deg, color-mix(in srgb, var(--c) 16%, var(--secondary-background-color)), var(--secondary-background-color) 70%); border: 1px solid color-mix(in srgb, var(--c) 25%, transparent); display: flex; flex-direction: column; gap: 6px; }
+    .pc-head { display: flex; align-items: center; gap: 8px; }
+    .pc-ic { width: 28px; height: 28px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); flex: none; }
+    .pc-ic ha-icon { --mdc-icon-size: 17px; }
+    .pc-l { font-size: 13px; font-weight: 500; display: flex; flex-direction: column; line-height: 1.15; }
+    .pc-l small { font-size: 10.5px; font-weight: 400; color: var(--secondary-text-color); }
+    .pc-v { font-size: 30px; font-weight: 400; letter-spacing: -.5px; line-height: 1; }
+    .pc-v span { font-size: .55em; vertical-align: top; opacity: .7; }
+    .pc-btns { display: flex; gap: 6px; }
+    .pc-btns button { flex: 1; font: inherit; border: none; border-radius: 10px; padding: 6px 0; cursor: pointer; background: color-mix(in srgb, var(--c, var(--primary-color)) 18%, transparent); color: var(--primary-text-color); display: inline-flex; align-items: center; justify-content: center; }
+    .pc-btns button:hover { background: color-mix(in srgb, var(--c, var(--primary-color)) 30%, transparent); }
+    .pc-btns button ha-icon { --mdc-icon-size: 18px; }
+    .pc-btns.small { max-width: 120px; --c: var(--primary-color); }
+    @media (max-width: 460px) { .pc-l small { display: none; } .pc-v { font-size: 26px; } }
+    .sw { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; color: var(--secondary-text-color); }
+    .sw input { display: none; }
+    .sw span { width: 36px; height: 20px; border-radius: 10px; background: var(--divider-color); position: relative; transition: background .2s; }
+    .sw span::after { content: ""; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; box-shadow: 0 1px 2px rgba(0,0,0,.3); }
+    .sw input:checked + span { background: var(--primary-color); }
+    .sw input:checked + span::after { transform: translateX(16px); }
+    .ph { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .ph.off { opacity: .45; }
+    @media (max-width: 460px) { .ph { grid-template-columns: 1fr; } }
+    .ph-main, .ph-spark, .last { border-radius: 14px; padding: 12px; background: var(--secondary-background-color); display: flex; flex-direction: column; gap: 6px; }
+    .ph-v { font-size: 30px; line-height: 1; }
+    .ph-v span { font-size: 14px; color: var(--secondary-text-color); }
+    .ph-sub { font-size: 13px; }
+    .ph-sub small { color: var(--secondary-text-color); }
+    .spark { position: relative; display: flex; align-items: flex-end; gap: 5px; height: 64px; padding-bottom: 1px; border-bottom: 1px solid var(--divider-color); }
+    .spark.empty { align-items: center; justify-content: center; font-size: 12px; color: var(--secondary-text-color); }
+    .sb { flex: 1; max-width: 26px; border-radius: 5px 5px 2px 2px; background: color-mix(in srgb, var(--primary-color) 45%, transparent); }
+    .sb.last { background: var(--primary-color); }
+    .sp-line { position: absolute; left: 0; right: 0; border-top: 2px dashed var(--ci-comfort); }
+    .last-h { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--secondary-text-color); }
+    .last-h ha-icon, .last-meta ha-icon { --mdc-icon-size: 15px; }
+    .last-row { display: flex; align-items: center; gap: 10px; }
+    .lt { font-size: 18px; font-weight: 500; white-space: nowrap; }
+    .lt small { font-size: 12px; font-weight: 400; color: var(--secondary-text-color); margin-left: 3px; }
+    .arrow { flex: 1; height: 6px; border-radius: 3px; background: var(--divider-color); overflow: hidden; }
+    .arrow i { display: block; height: 100%; border-radius: 3px; background: linear-gradient(90deg, var(--ci-eco), var(--ci-comfort)); }
+    .last-meta { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 12px; color: var(--secondary-text-color); }
+    .last-meta span { display: inline-flex; align-items: center; gap: 4px; }
+    .info { display: flex; flex-direction: column; border-radius: 14px; background: var(--secondary-background-color); overflow: hidden; }
+    .ir { display: flex; align-items: center; gap: 10px; padding: 10px 12px; font-size: 14px; }
+    .ir + .ir { border-top: 1px solid var(--divider-color); }
+    .ir ha-icon { --mdc-icon-size: 20px; color: var(--secondary-text-color); }
+    .ik { color: var(--secondary-text-color); min-width: 110px; }
+    .iv { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .st { font-size: 12px; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+    .st.ok { background: rgba(67, 160, 71, .18); color: #66bb6a; }
+    .st.wait { background: rgba(255, 179, 0, .18); color: #ffb300; }
+    .st.err { background: rgba(229, 57, 53, .18); color: #ef5350; }
+    @media (max-width: 460px) { .ik { min-width: 0; } .ir .iv { font-size: 12px; } }
     .savebar { position: sticky; bottom: -12px; background: var(--card-background-color); display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--divider-color); margin-top: 6px; }
     .savebar .muted { margin-right: auto; font-size: 13px; }
   `;
