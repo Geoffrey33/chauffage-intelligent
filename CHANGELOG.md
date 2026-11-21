@@ -1,5 +1,11 @@
 # Historique des versions
 
+## 1.2.9
+- **Pilotage** : grand cadran de thermostat (consigne, mesure, couleur selon la situation, boutons − / + pour un réglage ponctuel), modes de la pièce en vignettes avec leur valeur, carte Boost avec temps restant et barre de progression, planning du jour avec heures et prochain changement.
+- **Planning** : légende en pastilles, jour actuel mis en avant, horaires et température écrits dans les plages, temps de confort par jour et par semaine, éditeur de plage en carte (début / fin, type de plage en vignettes), outils regroupés (copier un jour, autre pièce, modèles), état d'enregistrement visible.
+- **Historique** : chiffres clés en cartes en haut, zone dégradée sous la courbe mesurée, graphique du temps de chauffe par jour sur 7 jours.
+- README : captures des quatre onglets.
+
 ## 1.2.8
 - Nouvel onglet Réglages des pièces (voir 1.2.7).
 - **Carte toujours à jour** : son adresse inclut désormais le numéro de version de l'intégration, le navigateur recharge donc la carte après chaque mise à jour sans qu'il faille vider le cache.

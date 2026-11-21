@@ -3,7 +3,7 @@
  */
 (() => {
   const DOMAIN = "chauffage_intelligent";
-  const CARD_VERSION = "1.2.8";
+  const CARD_VERSION = "1.2.9";
   const DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
   const DAY_SHORT = { mon: "Lun", tue: "Mar", wed: "Mer", thu: "Jeu", fri: "Ven", sat: "Sam", sun: "Dim" };
   const DAY_LONG = { mon: "lundi", tue: "mardi", wed: "mercredi", thu: "jeudi", fri: "vendredi", sat: "samedi", sun: "dimanche" };
@@ -471,32 +471,89 @@
     _controlHtml(a) {
       const manual = a.reason === "manual";
       const boost = a.reason === "boost";
-      return `
-        <div class="section">
-          <div class="label">Mode de la pièce</div>
-          <div class="seg">${ZONE_MODES.map((m) => `<button data-zmode="${m.key}" class="${a.zone_mode === m.key ? "on" : ""}"><ha-icon icon="${m.icon}"></ha-icon>${m.label}</button>`).join("")}</div>
-          <div class="hint">Auto suit le planning avec préchauffe. Les autres modes maintiennent la consigne jusqu'à ce que tu changes de mode.</div>
-        </div>
-        <div class="section">
-          <div class="label">Réglage ponctuel</div>
-          <div class="stepper big">
-            <button class="icon" data-manual="-0.5"><ha-icon icon="mdi:minus"></ha-icon></button>
-            <span class="val">${a.temperature == null ? "Arrêt" : fmtT(a.temperature)}</span>
-            <button class="icon" data-manual="0.5"><ha-icon icon="mdi:plus"></ha-icon></button>
+      const off = a.temperature === null || a.temperature === undefined;
+      const heating = a.hvac_action === "heating";
+      const accent = off ? "var(--disabled-text-color, #8a8a8a)" : boost ? "var(--ci-comfort-plus)"
+        : ["preheat", "absence_preheat", "vacation_preheat"].includes(a.reason) ? "#ffb300"
+        : ({ eco: "var(--ci-eco)", comfort: "var(--ci-comfort)", comfort_plus: "var(--ci-comfort-plus)" }[a.preset_mode] || "var(--ci-custom)");
+      // grand cadran
+      const MIN = 14, MAX = 26, R = 84, C = 2 * Math.PI * R, ARC = 0.75 * C;
+      const f = (v) => Math.max(0, Math.min(1, (Number(v) - MIN) / (MAX - MIN)));
+      const ang = (v) => ((135 + 270 * f(v)) * Math.PI) / 180;
+      const pt = (v, r = R) => [100 + r * Math.cos(ang(v)), 100 + r * Math.sin(ang(v))];
+      const cur = a.current_temperature;
+      const ticks = [];
+      for (let v = MIN; v <= MAX; v++) {
+        const [x1, y1] = pt(v, R - 14), [x2, y2] = pt(v, R - (v % 2 ? 18 : 22));
+        ticks.push(`<line class="tk ${v % 2 ? "" : "mj"}" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}"></line>`);
+      }
+      const dial = `
+        <div class="dial ${heating ? "heating" : ""}" style="--accent:${accent}">
+          <button class="dbtn" data-manual="-0.5" aria-label="Baisser"><ha-icon icon="mdi:minus"></ha-icon></button>
+          <div class="dial-c">
+            <svg viewBox="0 0 200 200">
+              <circle class="trk" cx="100" cy="100" r="${R}" stroke-dasharray="${ARC} ${C}" transform="rotate(135 100 100)"></circle>
+              ${off ? "" : `<circle class="val" cx="100" cy="100" r="${R}" stroke-dasharray="${ARC * f(a.temperature)} ${C}" transform="rotate(135 100 100)"></circle>`}
+              ${ticks.join("")}
+              ${off ? "" : `<circle class="tgt" cx="${pt(a.temperature)[0]}" cy="${pt(a.temperature)[1]}" r="9"></circle>`}
+              ${cur == null ? "" : `<circle class="cur" cx="${pt(cur)[0]}" cy="${pt(cur)[1]}" r="5"></circle>`}
+            </svg>
+            <div class="dial-in">
+              <div class="d-lbl">${off ? "Chauffage coupé" : heating ? "En chauffe vers" : "Consigne"}</div>
+              <div class="d-tgt">${off ? `<ha-icon icon="mdi:power"></ha-icon>` : `${Number(a.temperature).toLocaleString("fr-FR", { maximumFractionDigits: 1 })}<span>°</span>`}</div>
+              <div class="d-cur"><ha-icon icon="mdi:thermometer"></ha-icon>${fmtT(cur)} mesurés</div>
+            </div>
           </div>
-          <div class="hint">${a.zone_mode === "auto" ? "Valable jusqu'au prochain changement du planning." : "Valable jusqu'au prochain changement de mode."}</div>
-          ${manual ? `<button class="btn" data-resume><ha-icon icon="mdi:calendar-sync"></ha-icon>Reprendre le planning</button>` : ""}
+          <button class="dbtn" data-manual="0.5" aria-label="Monter"><ha-icon icon="mdi:plus"></ha-icon></button>
         </div>
-        <div class="section">
-          <div class="label">Boost</div>
-          ${boost
-            ? `<div class="row">Boost à ${fmtT(a.temperature)} jusqu'à ${fmtTime(a.boost_until)} <button class="btn" data-cancel-boost><ha-icon icon="mdi:stop"></ha-icon>Arrêter</button></div>`
-            : `<div class="seg">${[30, 60, 120].map((m) => `<button data-boost="${m}"><ha-icon icon="mdi:rocket-launch"></ha-icon>${m < 60 ? m + " min" : m / 60 + " h"}</button>`).join("")}</div>
-               <div class="hint">Chauffe à ${fmtT(a.boost_temp)} puis reprend le fonctionnement normal.</div>`}
+        <div class="status" style="--accent:${accent}">
+          <span class="chip-st"><ha-icon icon="${{ boost: "mdi:rocket-launch", manual: "mdi:hand-back-right", preheat: "mdi:clock-start", window: "mdi:window-open-variant", forced: "mdi:pin", eco: "mdi:leaf", planning: "mdi:calendar-clock", absence: "mdi:home-export-outline", vacation: "mdi:airplane" }[a.reason] || "mdi:information-outline"}"></ha-icon>${esc(a.reason_text || "")}</span>
+          ${manual || boost ? `<button class="btn" data-resume><ha-icon icon="mdi:calendar-sync"></ha-icon>Reprendre le planning</button>` : ""}
         </div>
+        <div class="hint center">${a.zone_mode === "auto" ? "− / + : réglage ponctuel jusqu'au prochain changement du planning." : "− / + : réglage ponctuel jusqu'au prochain changement de mode."}</div>`;
+
+      // modes
+      const modeSub = { auto: "Planning", eco: fmtT(a.eco), comfort: fmtT(a.comfort), comfort_plus: fmtT(a.comfort_plus), off: "Coupé" };
+      const modeCol = { auto: "var(--primary-color)", eco: "var(--ci-eco)", comfort: "var(--ci-comfort)", comfort_plus: "var(--ci-comfort-plus)", off: "var(--disabled-text-color, #8a8a8a)" };
+      const modes = `<div class="mgrid">${ZONE_MODES.map((m) => `
+        <button class="mt ${a.zone_mode === m.key ? "on" : ""}" data-zmode="${m.key}" style="--c:${modeCol[m.key]}">
+          <span class="mt-ic"><ha-icon icon="${m.icon}"></ha-icon></span><span class="mt-l">${m.label}</span><span class="mt-s">${modeSub[m.key]}</span>
+        </button>`).join("")}</div>`;
+
+      // boost
+      let boostHtml;
+      if (boost && a.boost_until) {
+        const end = new Date(a.boost_until).getTime();
+        const total = (Number(a.boost_duration) || 60) * 60000;
+        const left = Math.max(0, end - Date.now());
+        const pct = Math.max(0, Math.min(100, 100 - (left / total) * 100));
+        boostHtml = `
+          <div class="boost on">
+            <span class="b-ic"><ha-icon icon="mdi:rocket-launch"></ha-icon></span>
+            <div class="b-body"><div class="b-t">Boost ${fmtT(a.temperature)} · encore ${Math.ceil(left / 60000)} min</div>
+              <div class="b-bar"><i style="width:${pct}%"></i></div><div class="b-s">jusqu'à ${fmtTime(a.boost_until)}</div></div>
+            <button class="btn" data-cancel-boost><ha-icon icon="mdi:stop"></ha-icon>Arrêter</button>
+          </div>`;
+      } else {
+        boostHtml = `
+          <div class="boost">
+            <span class="b-ic"><ha-icon icon="mdi:rocket-launch"></ha-icon></span>
+            <div class="b-body"><div class="b-t">Boost à ${fmtT(a.boost_temp)}</div><div class="b-s">puis retour au fonctionnement normal</div></div>
+            <div class="b-ch">${[30, 60, 120].map((m) => `<button data-boost="${m}">${m < 60 ? m + " min" : m / 60 + " h"}</button>`).join("")}</div>
+          </div>`;
+      }
+
+      // aujourd'hui
+      const hours = [0, 6, 12, 18, 24].map((h) => `<span style="left:${(h / 24) * 100}%">${h}h</span>`).join("");
+      const next = a.next_change ? `Prochain changement à ${fmtTime(a.next_change)}` : "Pas de changement prévu";
+      return `
+        <div class="section">${dial}</div>
+        <div class="section"><div class="label">Mode de la pièce</div>${modes}</div>
+        <div class="section"><div class="label">Boost</div>${boostHtml}</div>
         <div class="section">
-          <div class="label">Aujourd'hui</div>
+          <div class="row" style="justify-content:space-between"><div class="label">Aujourd'hui</div><span class="hint">${next}</span></div>
           ${this._timelineRow(a, todayKey(), false)}
+          <div class="hl tl">${hours}</div>
           <div class="hint">${a.preheat ? "Les heures du planning sont celles où la température doit être atteinte : la préchauffe démarre avant." : "Préchauffe désactivée : la chauffe démarre à l'heure du planning."}</div>
         </div>`;
     }
@@ -612,23 +669,46 @@
         <svg class="chart" viewBox="0 0 ${W} ${H}">
           ${bands((p) => p.heat, "heat")}${bands((p) => p.win, "win")}
           ${yTicks.join("")}${xTicks.join("")}
+          <defs><linearGradient id="ga" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="var(--primary-color)" stop-opacity=".18"></stop><stop offset="1" stop-color="var(--primary-color)" stop-opacity="0"></stop></linearGradient></defs>
+          ${(() => { const d = line("cur"); const m = d.match(/^M([\d.]+),/); const e = d.match(/L([\d.]+),[\d.]+$/); return m && e && !d.slice(1).includes("M") ? `<path class="area" d="${d}L${e[1]},${H - B}L${m[1]},${H - B}Z"></path>` : ""; })()}
           <path class="tgt" d="${step("tgt")}"></path>
           <path class="cur" d="${line("cur")}"></path>
         </svg>`;
+      // temps de chauffe par jour (7 jours)
+      let daily = "";
+      if (days === 7) {
+        const byDay = [];
+        const d0 = new Date(h.end); d0.setHours(0, 0, 0, 0);
+        for (let i = 6; i >= 0; i--) {
+          const st = d0.getTime() - i * 86400000, en = st + 86400000;
+          const ms = segs.reduce((acc, p) => acc + (p.heat ? Math.max(0, Math.min(p.t1, en) - Math.max(p.t, st)) : 0), 0);
+          byDay.push({ st, ms });
+        }
+        const mx = Math.max(3600000, ...byDay.map((d) => d.ms));
+        daily = `
+          <div class="section">
+            <div class="label">Temps de chauffe par jour</div>
+            <div class="dbars">${byDay.map((d) => `
+              <div class="dbar"><span class="dv">${fmtDur(d.ms)}</span><span class="db" style="height:${Math.max(3, (d.ms / mx) * 100)}%"></span>
+              <span class="dl">${DAY_SHORT[DAYS[(new Date(d.st).getDay() + 6) % 7]]}</span></div>`).join("")}</div>
+          </div>`;
+      }
+      const kpi = (icon, v, k, c) => `<div class="kpi" style="--c:${c}"><span class="k-ic"><ha-icon icon="${icon}"></ha-icon></span><div><div class="v">${v}</div><div class="k">${k}</div></div></div>`;
       return `
+        <div class="kpis">
+          ${kpi("mdi:fire", fmtDur(todayMs), "de chauffe aujourd'hui", "var(--ci-comfort)")}
+          ${kpi("mdi:clock-outline", fmtDur(heatMs), `sur ${days === 1 ? "24 h" : "7 jours"}${days === 7 ? ` · ${fmtDur(heatMs / 7)}/j` : ""}`, "var(--ci-comfort-plus)")}
+          ${kpi("mdi:thermometer", avg == null ? "—" : fmtT(avg), "température moyenne", "var(--primary-color)")}
+          ${kpi("mdi:target", onMs ? Math.round((okMs / onMs) * 100) + " %" : "—", "du temps à la consigne", "var(--ci-eco)")}
+        </div>
         <div class="section">
           <div class="row wrap" style="justify-content:space-between">${seg}
-            <div class="legend"><span class="lg"><span class="ln cur"></span>Mesurée</span><span class="lg"><span class="ln tgt"></span>Consigne</span><span class="lg"><span class="sq heat"></span>Demande de chauffe</span><span class="lg"><span class="sq win"></span>Fenêtre</span></div>
+            <div class="legend"><span class="lg"><span class="ln cur"></span>Mesurée</span><span class="lg"><span class="ln tgt"></span>Consigne</span><span class="lg"><span class="sq heat"></span>Chauffe</span><span class="lg"><span class="sq win"></span>Fenêtre</span></div>
           </div>
           ${chart}
         </div>
-        <div class="section stats">
-          <div class="stat"><span class="v">${fmtDur(todayMs)}</span><span class="k">de chauffe aujourd'hui</span></div>
-          <div class="stat"><span class="v">${fmtDur(heatMs)}</span><span class="k">de chauffe sur ${days === 1 ? "24 h" : "7 jours"}${days === 7 ? ` (${fmtDur(heatMs / 7)} / jour)` : ""}</span></div>
-          <div class="stat"><span class="v">${avg == null ? "—" : fmtT(avg)}</span><span class="k">température moyenne</span></div>
-          <div class="stat"><span class="v">${onMs ? Math.round((okMs / onMs) * 100) + " %" : "—"}</span><span class="k">du temps à la consigne</span></div>
-        </div>
-        <div class="hint">« Demande de chauffe » : la pièce est sous sa consigne. La PAC peut moduler sa puissance pendant ces périodes.</div>`;
+        ${daily}
+        <div class="hint">« Chauffe » : la pièce est sous sa consigne. La PAC peut moduler sa puissance pendant ces périodes.</div>`;
     }
 
     // ------------------------------------------------------------ Réglages
@@ -741,7 +821,7 @@
         const sel = editable && this._sel && this._sel.day === day && this._sel.index === i;
         return `<div class="slot ${sel ? "sel" : ""}" title="${sl.start} – ${sl.end} · ${fmtT(slotTemp(sl, a))}" data-day="${day}" data-i="${i}" style="left:${l}%;width:${w}%;background:${PRESETS[sl.preset].color}">
           ${editable ? `<span class="h l" data-h="l"></span><span class="h r" data-h="r"></span>` : ""}
-          ${w >= 4.5 ? `<span class="st">${fmtT(slotTemp(sl, a))}</span>` : ""}</div>`;
+          ${w >= 17 ? `<span class="st"><b>${fmtT(slotTemp(sl, a))}</b> ${sl.start}–${sl.end}</span>` : w >= 4.5 ? `<span class="st"><b>${fmtT(slotTemp(sl, a))}</b></span>` : ""}</div>`;
       }).join("");
       const now = day === todayKey() ? `<div class="nowline" style="left:${(nowMin() / 1440) * 100}%"></div>` : "";
       return `<div class="track ${editable ? "edit" : ""}" data-track="${day}">${ticks}${blocks}${now}</div>`;
@@ -749,39 +829,48 @@
 
     _planningHtml(a) {
       const hours = [0, 6, 12, 18, 24].map((h) => `<span style="left:${(h / 24) * 100}%">${h}h</span>`).join("");
+      const today = todayKey();
+      const dayTotal = (d) => (this._draft[d] || []).filter((sl) => sl.preset !== "eco").reduce((acc, sl) => acc + toMin(sl.end) - toMin(sl.start), 0);
+      const fmtH = (m) => (m ? `${Math.floor(m / 60)} h${m % 60 ? String(m % 60).padStart(2, "0") : ""}` : "—");
       const rows = DAYS.map((d) => `
-        <div class="prow">
-          <span class="dname">${DAY_SHORT[d]}</span>
+        <div class="prow ${d === today ? "today" : ""}">
+          <span class="dname">${DAY_SHORT[d]}${d === today ? "<i>auj.</i>" : ""}</span>
           ${this._timelineRow(a, d, true)}
+          <span class="dtot" title="Temps en Confort / Confort + / Perso">${fmtH(dayTotal(d))}</span>
         </div>`).join("");
-      const legend = ["eco", "comfort", "comfort_plus"].map((p) => `<span class="lg"><span class="dot" style="background:${PRESETS[p].color}"></span>${PRESETS[p].label} ${fmtT(a[p])}</span>`).join("") +
-        `<span class="lg"><span class="dot" style="background:${PRESETS.custom.color}"></span>Perso</span>`;
+      const week = DAYS.reduce((acc, d) => acc + dayTotal(d), 0);
+      const legend = ["eco", "comfort", "comfort_plus", "custom"].map((p) => `<span class="lgc" style="--c:${PRESETS[p].color}"><ha-icon icon="${PRESETS[p].icon}"></ha-icon>${PRESETS[p].label}${p !== "custom" ? ` <b>${fmtT(a[p])}</b>` : ""}</span>`).join("");
       const others = (this.zones || []).filter((z) => z !== this.entityId && this._hass.states[z]);
       return `
-        <div class="legend">${legend}<span class="lg muted">Hors plage : Eco</span></div>
-        <div class="hours"><span class="dname"></span><div class="hl">${hours}</div></div>
-        ${rows}
-        <div class="hint">Touche une zone vide pour ajouter une plage, fais glisser une plage ou ses bords pour la déplacer (pas de ${SNAP} min). Les heures sont celles où la température doit être atteinte.</div>
-        ${this._sel ? this._slotEditor(a) : ""}
-        <div class="section tools">
-          <div class="label">Copier</div>
-          <div class="row wrap">
+        <div class="legend2">${legend}<span class="lg muted">Hors plage : Eco ${fmtT(a.eco)}</span></div>
+        <div class="pgrid">
+          <div class="hours"><span class="dname"></span><div class="hl">${hours}</div><span class="dtot muted">Confort</span></div>
+          ${rows}
+          <div class="pfoot"><span class="muted">${fmtH(week)} de confort sur la semaine</span></div>
+        </div>
+        ${this._sel ? this._slotEditor(a) : `<div class="hint center"><ha-icon icon="mdi:gesture-tap"></ha-icon> Touche une zone vide pour ajouter une plage · fais glisser une plage ou ses bords (pas de ${SNAP} min)</div>`}
+        <div class="tools2">
+          <div class="tool">
+            <div class="tool-h"><ha-icon icon="mdi:content-copy"></ha-icon>Copier un jour</div>
             <select data-copy-from>${DAYS.map((d) => `<option value="${d}" ${d === (this._copyFrom || "mon") ? "selected" : ""}>Le ${DAY_LONG[d]}</option>`).join("")}</select>
-            <span>vers</span>
-            <div class="seg small">${DAYS.map((d) => `<button data-copy-to="${d}" class="${this._copyDays.has(d) ? "on" : ""}">${DAY_SHORT[d]}</button>`).join("")}</div>
-            <button class="btn" data-copy ${this._copyDays.size ? "" : "disabled"}><ha-icon icon="mdi:content-copy"></ha-icon>Copier</button>
+            <div class="days">${DAYS.map((d) => `<button data-copy-to="${d}" class="${this._copyDays.has(d) ? "on" : ""}">${DAY_SHORT[d].slice(0, 2)}</button>`).join("")}</div>
+            <button class="btn" data-copy ${this._copyDays.size ? "" : "disabled"}>Copier</button>
           </div>
-          ${others.length ? `<div class="row wrap">
+          ${others.length ? `<div class="tool">
+            <div class="tool-h"><ha-icon icon="mdi:import"></ha-icon>Autre pièce</div>
             <select data-from-zone>${others.map((z) => `<option value="${esc(z)}">${esc(this._hass.states[z].attributes.friendly_name)}</option>`).join("")}</select>
-            <button class="btn" data-import><ha-icon icon="mdi:import"></ha-icon>Reprendre le planning de cette pièce</button>
+            <span class="hint">Reprend toutes ses plages</span>
+            <button class="btn" data-import>Reprendre</button>
           </div>` : ""}
-          <div class="row wrap">
-            <button class="btn" data-preset-week><ha-icon icon="mdi:calendar-start"></ha-icon>Modèle semaine de travail</button>
+          <div class="tool">
+            <div class="tool-h"><ha-icon icon="mdi:calendar-start"></ha-icon>Modèles</div>
+            <button class="btn" data-preset-week>Semaine de travail</button>
+            <span class="hint">6h30–7h30 et 18h–22h30, week-end 8h–22h30</span>
             <button class="btn danger" data-clear><ha-icon icon="mdi:delete-sweep-outline"></ha-icon>Tout effacer</button>
           </div>
         </div>
-        <div class="savebar">
-          <span class="muted">${this._dirty ? "Modifications non enregistrées" : "Planning à jour"}</span>
+        <div class="savebar ${this._dirty ? "dirty" : ""}">
+          <span class="sv-st"><ha-icon icon="${this._dirty ? "mdi:pencil-circle" : "mdi:check-circle"}"></ha-icon>${this._dirty ? "Modifications non enregistrées" : "Planning enregistré"}</span>
           <button class="btn" data-cancel ${this._dirty ? "" : "disabled"}>Annuler</button>
           <button class="btn primary" data-save ${this._dirty ? "" : "disabled"}><ha-icon icon="mdi:content-save"></ha-icon>Enregistrer</button>
         </div>`;
@@ -791,19 +880,23 @@
       const { day, index } = this._sel;
       const sl = this._draft[day][index];
       if (!sl) return "";
+      const c = PRESETS[sl.preset].color;
       return `
-        <div class="editor">
-          <div class="row wrap">
-            <strong>${DAY_LONG[day][0].toUpperCase() + DAY_LONG[day].slice(1)}</strong>
-            <label>de <input type="time" step="900" data-f="start" value="${sl.start}"></label>
-            <label>à <input type="time" step="900" data-f="end" value="${sl.end === "24:00" ? "23:59" : sl.end}"></label>
+        <div class="editor editor2" style="--c:${c}">
+          <div class="ed-h">
+            <span class="ed-ic"><ha-icon icon="${PRESETS[sl.preset].icon}"></ha-icon></span>
+            <div><div class="ed-t">Plage du ${DAY_LONG[day]}</div><div class="muted">${sl.start} – ${sl.end} · ${fmtT(slotTemp(sl, a))}</div></div>
+            <button class="icon" data-desel title="Fermer"><ha-icon icon="mdi:check"></ha-icon></button>
           </div>
-          <div class="seg">${Object.entries(PRESETS).map(([k, p]) => `<button data-p="${k}" class="${sl.preset === k ? "on" : ""}"><span class="dot" style="background:${p.color}"></span>${p.label}${k !== "custom" ? " " + fmtT(a[k]) : ""}</button>`).join("")}</div>
+          <div class="ed-times">
+            <label><span>Début</span><input type="time" step="900" data-f="start" value="${sl.start}"></label>
+            <ha-icon icon="mdi:arrow-right"></ha-icon>
+            <label><span>Fin</span><input type="time" step="900" data-f="end" value="${sl.end === "24:00" ? "23:59" : sl.end}"></label>
+          </div>
+          <div class="ed-p">${Object.entries(PRESETS).map(([k, p]) => `
+            <button data-p="${k}" class="${sl.preset === k ? "on" : ""}" style="--c:${p.color}"><ha-icon icon="${p.icon}"></ha-icon>${p.label}<small>${k !== "custom" ? fmtT(a[k]) : sl.preset === "custom" ? fmtT(sl.temp) : "au choix"}</small></button>`).join("")}</div>
           ${sl.preset === "custom" ? `<label class="row">Température <input type="number" min="7" max="30" step="0.5" data-f="temp" value="${sl.temp ?? a.comfort}"> °C</label>` : ""}
-          <div class="row">
-            <button class="btn danger" data-del><ha-icon icon="mdi:delete-outline"></ha-icon>Supprimer</button>
-            <button class="btn" data-desel>OK</button>
-          </div>
+          <button class="btn danger" data-del><ha-icon icon="mdi:delete-outline"></ha-icon>Supprimer la plage</button>
         </div>`;
     }
 
@@ -1144,6 +1237,113 @@
     .st.wait { background: rgba(255, 179, 0, .18); color: #ffb300; }
     .st.err { background: rgba(229, 57, 53, .18); color: #ef5350; }
     @media (max-width: 460px) { .ik { min-width: 0; } .ir .iv { font-size: 12px; } }
+
+    .dial { display: flex; align-items: center; justify-content: center; gap: 18px; }
+    .dial-c { position: relative; width: 230px; height: 230px; }
+    .dial-c svg { width: 100%; height: 100%; overflow: visible; }
+    .dial .trk, .dial .val { fill: none; stroke-width: 12; stroke-linecap: round; }
+    .dial .trk { stroke: var(--divider-color); }
+    .dial .val { stroke: var(--accent); transition: stroke-dasharray .4s; }
+    .dial.heating .val { animation: dglow 2s ease-in-out infinite; }
+    @keyframes dglow { 50% { opacity: .55; } }
+    .dial .tk { stroke: var(--divider-color); stroke-width: 1.2; }
+    .dial .tk.mj { stroke: var(--secondary-text-color); opacity: .6; stroke-width: 1.6; }
+    .dial .tgt { fill: var(--card-background-color); stroke: var(--accent); stroke-width: 4; }
+    .dial .cur { fill: var(--primary-text-color); }
+    .dial-in { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+    .d-lbl { font-size: 12px; color: var(--secondary-text-color); }
+    .d-tgt { font-size: 56px; font-weight: 300; line-height: 1; letter-spacing: -1.5px; color: var(--accent); }
+    .d-tgt span { font-size: .45em; vertical-align: top; }
+    .d-tgt ha-icon { --mdc-icon-size: 44px; }
+    .d-cur { display: inline-flex; align-items: center; gap: 4px; font-size: 13px; color: var(--secondary-text-color); margin-top: 4px; }
+    .d-cur ha-icon { --mdc-icon-size: 15px; }
+    .dbtn { width: 52px; height: 52px; border-radius: 50%; border: 1px solid var(--divider-color); background: var(--secondary-background-color); color: var(--primary-text-color); cursor: pointer; display: inline-flex; align-items: center; justify-content: center; flex: none; }
+    .dbtn:hover { border-color: var(--accent); color: var(--accent); }
+    .dbtn ha-icon { --mdc-icon-size: 26px; }
+    @media (max-width: 420px) { .dial { gap: 8px; } .dial-c { width: 200px; height: 200px; } .dbtn { width: 44px; height: 44px; } .d-tgt { font-size: 48px; } }
+    .status { display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 8px; margin-top: 4px; }
+    .chip-st { display: inline-flex; align-items: center; gap: 6px; font-size: 14px; padding: 7px 14px; border-radius: 999px; background: color-mix(in srgb, var(--accent) 16%, transparent); color: var(--primary-text-color); }
+    .chip-st ha-icon { --mdc-icon-size: 18px; color: var(--accent); }
+    .hint.center { text-align: center; }
+    .mgrid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+    @media (max-width: 460px) { .mgrid { grid-template-columns: repeat(5, 1fr); gap: 4px; } .mt-l { font-size: 11px !important; } }
+    .mt { font: inherit; border: 1px solid var(--divider-color); background: var(--secondary-background-color); color: var(--primary-text-color); border-radius: 14px; padding: 10px 4px 8px; cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 4px; transition: border-color .15s, background .15s; }
+    .mt-ic { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--c) 18%, transparent); color: var(--c); }
+    .mt-ic ha-icon { --mdc-icon-size: 19px; }
+    .mt-l { font-size: 12.5px; font-weight: 500; white-space: nowrap; }
+    .mt-s { font-size: 11px; color: var(--secondary-text-color); }
+    .mt.on { border-color: var(--c); background: color-mix(in srgb, var(--c) 14%, var(--secondary-background-color)); box-shadow: 0 0 0 1px var(--c) inset; }
+    .mt.on .mt-ic { background: var(--c); color: #fff; }
+    .boost { display: flex; align-items: center; gap: 12px; padding: 12px; border-radius: 14px; background: var(--secondary-background-color); flex-wrap: wrap; }
+    .boost.on { background: color-mix(in srgb, var(--ci-comfort-plus) 14%, var(--secondary-background-color)); border: 1px solid color-mix(in srgb, var(--ci-comfort-plus) 40%, transparent); }
+    .b-ic { width: 40px; height: 40px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--ci-comfort-plus) 18%, transparent); color: var(--ci-comfort-plus); flex: none; }
+    .boost.on .b-ic { background: var(--ci-comfort-plus); color: #fff; }
+    .b-body { flex: 1; min-width: 140px; display: flex; flex-direction: column; gap: 4px; }
+    .b-t { font-size: 15px; font-weight: 500; }
+    .b-s { font-size: 12px; color: var(--secondary-text-color); }
+    .b-bar { height: 6px; border-radius: 3px; background: var(--divider-color); overflow: hidden; }
+    .b-bar i { display: block; height: 100%; background: var(--ci-comfort-plus); }
+    .b-ch { display: flex; gap: 6px; }
+    .b-ch button { font: inherit; font-size: 13px; border: none; border-radius: 10px; padding: 8px 12px; cursor: pointer; background: color-mix(in srgb, var(--ci-comfort-plus) 18%, transparent); color: var(--primary-text-color); }
+    .b-ch button:hover { background: color-mix(in srgb, var(--ci-comfort-plus) 32%, transparent); }
+    .hl.tl { margin-top: 2px; }
+
+    .legend2 { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 4px 0 12px; font-size: 12px; }
+    .lgc { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 999px; background: color-mix(in srgb, var(--c) 16%, transparent); }
+    .lgc ha-icon { --mdc-icon-size: 15px; color: var(--c); }
+    .pgrid { border-radius: 14px; background: var(--secondary-background-color); padding: 10px 10px 6px; }
+    .pgrid .hours, .pgrid .prow { grid-template-columns: 40px 1fr 46px; }
+    .pgrid .track { background: var(--card-background-color); }
+    .prow.today .dname { color: var(--primary-color); font-weight: 600; }
+    .dname i { display: block; font-style: normal; font-size: 9.5px; font-weight: 400; }
+    .dtot { font-size: 11.5px; text-align: right; color: var(--secondary-text-color); font-variant-numeric: tabular-nums; }
+    .prow.today .track { box-shadow: 0 0 0 1.5px color-mix(in srgb, var(--primary-color) 60%, transparent); }
+    .slot .st b { font-weight: 600; }
+    .pfoot { display: flex; justify-content: flex-end; font-size: 12px; padding: 4px 2px 0; }
+    .hint.center { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 10px 0; }
+    .hint.center ha-icon { --mdc-icon-size: 16px; }
+    .editor2 { margin: 12px 0; padding: 12px; border-radius: 14px; border: 1px solid color-mix(in srgb, var(--c) 45%, transparent); background: linear-gradient(160deg, color-mix(in srgb, var(--c) 14%, var(--secondary-background-color)), var(--secondary-background-color) 70%); display: flex; flex-direction: column; gap: 12px; }
+    .ed-h { display: flex; align-items: center; gap: 10px; }
+    .ed-h > div { flex: 1; }
+    .ed-ic { width: 36px; height: 36px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: var(--c); color: #fff; }
+    .ed-t { font-weight: 500; }
+    .ed-times { display: flex; align-items: center; gap: 10px; }
+    .ed-times label { display: flex; flex-direction: column; gap: 2px; font-size: 11px; color: var(--secondary-text-color); flex: 1; }
+    .ed-times input { font: inherit; font-size: 18px; padding: 8px 10px; border-radius: 10px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); }
+    .ed-p { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+    .ed-p button { font: inherit; font-size: 12.5px; border: 1px solid var(--divider-color); border-radius: 12px; padding: 8px 4px; background: var(--card-background-color); color: var(--primary-text-color); cursor: pointer; display: flex; flex-direction: column; align-items: center; gap: 2px; }
+    .ed-p button ha-icon { --mdc-icon-size: 18px; color: var(--c); }
+    .ed-p button small { font-size: 11px; color: var(--secondary-text-color); }
+    .ed-p button.on { border-color: var(--c); box-shadow: 0 0 0 1px var(--c) inset; background: color-mix(in srgb, var(--c) 14%, var(--card-background-color)); }
+    .editor2 input[type=number] { font: inherit; width: 80px; padding: 5px 8px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); }
+    .editor2 .btn.danger { align-self: flex-start; }
+    .tools2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 8px; margin-top: 12px; }
+    .tool { border-radius: 14px; background: var(--secondary-background-color); padding: 12px; display: flex; flex-direction: column; gap: 8px; }
+    .tool-h { display: flex; align-items: center; gap: 6px; font-weight: 500; font-size: 14px; }
+    .tool-h ha-icon { --mdc-icon-size: 18px; color: var(--primary-color); }
+    .tool select { font: inherit; padding: 6px 8px; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); }
+    .tool .btn { justify-content: center; }
+    .days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; }
+    .days button { font: inherit; font-size: 11.5px; padding: 6px 0; border-radius: 8px; border: 1px solid var(--divider-color); background: var(--card-background-color); color: var(--primary-text-color); cursor: pointer; }
+    .days button.on { background: var(--primary-color); border-color: var(--primary-color); color: var(--text-primary-color, #fff); }
+    .savebar .sv-st { margin-right: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--secondary-text-color); }
+    .savebar .sv-st ha-icon { --mdc-icon-size: 18px; color: var(--ci-eco); }
+    .savebar.dirty .sv-st { color: var(--warning-color, #ffa600); }
+    .savebar.dirty .sv-st ha-icon { color: var(--warning-color, #ffa600); }
+    .kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin: 6px 0 4px; }
+    @media (max-width: 560px) { .kpis { grid-template-columns: repeat(2, 1fr); } }
+    .kpi { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 14px; background: linear-gradient(160deg, color-mix(in srgb, var(--c) 14%, var(--secondary-background-color)), var(--secondary-background-color) 70%); }
+    .k-ic { width: 34px; height: 34px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--c) 22%, transparent); color: var(--c); flex: none; }
+    .k-ic ha-icon { --mdc-icon-size: 18px; }
+    .kpi .v { font-size: 19px; font-weight: 500; line-height: 1.1; }
+    .kpi .k { font-size: 11.5px; color: var(--secondary-text-color); }
+    .chart .area { fill: url(#ga); stroke: none; }
+    .dbars { display: flex; align-items: flex-end; gap: 8px; height: 130px; padding-top: 4px; }
+    .dbar { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; gap: 4px; }
+    .db { width: 100%; max-width: 44px; border-radius: 8px 8px 3px 3px; background: linear-gradient(180deg, var(--ci-comfort-plus), var(--ci-comfort)); }
+    .dbar:last-child .db { box-shadow: 0 0 0 2px var(--primary-text-color); }
+    .dv { font-size: 10.5px; color: var(--secondary-text-color); white-space: nowrap; }
+    .dl { font-size: 12px; }
     .savebar { position: sticky; bottom: -12px; background: var(--card-background-color); display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 10px 0; border-top: 1px solid var(--divider-color); margin-top: 6px; }
     .savebar .muted { margin-right: auto; font-size: 13px; }
   `;
