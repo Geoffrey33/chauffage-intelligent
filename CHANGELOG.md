@@ -1,5 +1,9 @@
 # Historique des versions
 
+## 1.2.8
+- Nouvel onglet Réglages des pièces (voir 1.2.7).
+- **Carte toujours à jour** : son adresse inclut désormais le numéro de version de l'intégration, le navigateur recharge donc la carte après chaque mise à jour sans qu'il faille vider le cache.
+
 ## 1.2.7
 - **Nouvel onglet Réglages des pièces** :
   - échelle colorée situant Eco, Confort, Confort + et la température mesurée ;
