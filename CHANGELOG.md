@@ -1,5 +1,8 @@
 # Historique des versions
 
+## 1.3.1
+- Release de référence pour le catalogue HACS : description, sujets et tickets du dépôt renseignés, validation HACS et hassfest complètes. Aucun changement de fonctionnement.
+
 ## 1.3.0
 - **Affichage sur téléphone** :
   - fenêtre des pièces toujours opaque, même avec un thème à fond transparent, et fond flouté derrière ;
